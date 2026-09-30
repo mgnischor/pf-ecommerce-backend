@@ -5,29 +5,31 @@ namespace Portfolio.Catalog.Domain;
 /// <summary>
 /// Event raised on every product lifecycle transition (BR-CAT-003).
 /// </summary>
-public sealed record ProductStatusChanged(
+internal sealed record ProductStatusChanged(
     Guid EventId,
     Guid AggregateId,
+    int AggregateVersion,
     DateTimeOffset OccurredAt,
     ProductStatus From,
-    ProductStatus To) : IDomainEvent
+    ProductStatus To
+) : IDomainEvent
 {
     /// <summary>
-    /// Creates the event for a status transition.
+    /// Creates the event for a status transition. Must be called after the state change.
     /// </summary>
     /// <param name="product">The product that transitioned.</param>
     /// <param name="from">Status before the transition.</param>
-    /// <param name="timeProvider">Source of UTC time.</param>
-    public static ProductStatusChanged For(Product product, ProductStatus from, TimeProvider timeProvider)
+    public static ProductStatusChanged For(Product product, ProductStatus from)
     {
         ArgumentNullException.ThrowIfNull(product);
-        ArgumentNullException.ThrowIfNull(timeProvider);
 
         return new ProductStatusChanged(
-            Guid.CreateVersion7(),
+            Guid.CreateVersion7(product.UpdatedAt),
             product.Id,
-            timeProvider.GetUtcNow(),
+            product.Version,
+            product.UpdatedAt,
             from,
-            product.Status);
+            product.Status
+        );
     }
 }
