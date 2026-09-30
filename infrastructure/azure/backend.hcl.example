@@ -1,0 +1,9 @@
+# Copy to backend.<environment>.hcl and run:
+#   terraform init -backend-config=backend.production.hcl
+# The state storage account is created once, out of band: ZRS/GRS, versioning and soft delete on,
+# shared keys disabled, public access blocked (or private endpoint), RBAC limited to the CI identity.
+resource_group_name  = "pf-ecommerce-tfstate-rg"
+storage_account_name = "pfecommercetfstate<suffix>"
+container_name       = "tfstate"
+key                  = "platform/production/terraform.tfstate"
+use_azuread_auth     = true
