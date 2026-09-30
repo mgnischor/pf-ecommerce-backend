@@ -4,8 +4,9 @@ namespace Portfolio.SharedKernel.Domain;
 /// Base class for all persisted domain entities.
 /// Provides identity plus mandatory traceability fields
 /// (<c>Id</c>, <c>CreatedAt</c>, <c>UpdatedAt</c>, <c>DeletedAt</c>, UTC).
+/// Two entities are equal when they have the same runtime type and the same non-empty identity.
 /// </summary>
-public abstract class Entity : IEquatable<Entity>
+internal abstract class Entity
 {
     /// <summary>Unique identity of the entity. Generated in the domain.</summary>
     public Guid Id { get; protected set; }
@@ -23,9 +24,7 @@ public abstract class Entity : IEquatable<Entity>
     public bool IsDeleted => DeletedAt.HasValue;
 
     /// <summary>EF Core constructor. Do not use in domain code.</summary>
-    protected Entity()
-    {
-    }
+    protected Entity() { }
 
     /// <summary>
     /// Initializes a new entity with domain-generated identity and timestamps from <paramref name="timeProvider"/>.
@@ -50,9 +49,20 @@ public abstract class Entity : IEquatable<Entity>
         DeletedAt = null;
     }
 
-    /// <summary>Creates a time-ordered, index-friendly identifier.</summary>
+    /// <summary>Creates a time-ordered, index-friendly identifier stamped with the injected clock.</summary>
+    /// <param name="timeProvider">Source of UTC time.</param>
     /// <returns>A new version 7 UUID.</returns>
-    public static Guid NewId() => Guid.CreateVersion7();
+    public static Guid NewId(TimeProvider timeProvider)
+    {
+        ArgumentNullException.ThrowIfNull(timeProvider);
+        return Guid.CreateVersion7(timeProvider.GetUtcNow());
+    }
+
+    /// <summary>
+    /// Called after every state change (update, deletion, restoration).
+    /// Aggregate roots use it to advance their concurrency version.
+    /// </summary>
+    protected virtual void OnModified() { }
 
     /// <summary>Refreshes the update timestamp.</summary>
     /// <param name="timeProvider">Source of UTC time.</param>
@@ -60,6 +70,7 @@ public abstract class Entity : IEquatable<Entity>
     {
         ArgumentNullException.ThrowIfNull(timeProvider);
         UpdatedAt = timeProvider.GetUtcNow();
+        OnModified();
     }
 
     /// <summary>Performs a logical deletion, preserving history.</summary>
@@ -70,6 +81,7 @@ public abstract class Entity : IEquatable<Entity>
         var now = timeProvider.GetUtcNow();
         DeletedAt = now;
         UpdatedAt = now;
+        OnModified();
     }
 
     /// <summary>Restores a logically deleted entity.</summary>
@@ -79,33 +91,20 @@ public abstract class Entity : IEquatable<Entity>
         ArgumentNullException.ThrowIfNull(timeProvider);
         DeletedAt = null;
         UpdatedAt = timeProvider.GetUtcNow();
+        OnModified();
     }
 
     /// <inheritdoc />
-    public bool Equals(Entity? other)
+    public override bool Equals(object? obj)
     {
-        if (other is null)
-        {
-            return false;
-        }
-
-        if (ReferenceEquals(this, other))
+        if (ReferenceEquals(this, obj))
         {
             return true;
         }
 
-        return Id != Guid.Empty && Id == other.Id;
+        return obj is Entity other && GetType() == other.GetType() && Id != Guid.Empty && Id == other.Id;
     }
 
     /// <inheritdoc />
-    public override bool Equals(object? obj) => Equals(obj as Entity);
-
-    /// <inheritdoc />
     public override int GetHashCode() => Id.GetHashCode();
-
-    /// <summary>Identity equality operator.</summary>
-    public static bool operator ==(Entity? left, Entity? right) => Equals(left, right);
-
-    /// <summary>Identity inequality operator.</summary>
-    public static bool operator !=(Entity? left, Entity? right) => !Equals(left, right);
 }
