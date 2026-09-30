@@ -1,0 +1,116 @@
+# Task Checklist
+
+This file is the **single source of truth for task progress** during active development.
+
+## Checkbox Legend
+
+| Marker | Meaning |
+| --- | --- |
+| `[ ]` | Not started |
+| `[~]` | In progress |
+| `[x]` | Completed |
+
+> **Rules:**
+>
+> - Mark a task `[~]` before starting it.
+> - Mark a task `[x]` immediately after completing it.
+> - Only one task should be `[~]` at a time unless tasks are truly parallel.
+> - Do not alter task descriptions — only change the checkbox marker.
+> - If a task is blocked, leave it unchecked and append an inline note: `<!-- BLOCKED: reason -->`.
+
+---
+
+## Active Sprint
+
+### Architecture
+
+- [ ] Define bounded contexts, the Context Map (`docs/`), and the subdomain classification ADR
+- [ ] Create the shared primitives in `SharedKernel` (`Entity`, `AggregateRoot`, `Result`, `Money`, event abstractions)
+- [ ] Add architecture tests enforcing the dependency flow (API → Application → Domain, Infrastructure implementing Domain-defined interfaces) and context boundaries
+- [ ] Record the messaging-library and in-process dispatcher decisions as ADRs
+
+### Business Rules
+
+- [ ] Identify and document domain invariants as `BR-` rules in `docs/business-rules/`
+- [ ] Implement invariants inside aggregates and entities
+- [ ] Define state machines for Order, Payment, Shipment, Stock Reservation, and Cart
+- [ ] Verify each business rule is traceable to a requirement
+
+### Code Quality
+
+- [ ] Add `global.json`, `Directory.Build.props`, `Directory.Packages.props`, and `.editorconfig` (analyzers, nullable, warnings as errors, central package management, lock files)
+- [ ] Apply SOLID principles across all new code
+- [ ] Achieve ≥ 80% line coverage and ≥ 70% branch coverage
+- [ ] Resolve all analyzer and formatting (CSharpier/Prettier) warnings
+
+### Database
+
+- [ ] Add `CreatedAt`, `UpdatedAt`, and `DeletedAt` (a nullable timestamp, not a boolean `IsDeleted` flag) to all new entities, populated by a `SaveChanges` interceptor
+- [ ] Add a `Version` column to aggregate-root tables and enforce optimistic concurrency on every update
+- [ ] Create one schema and one `DbContext` per bounded context, each with its own migration history
+- [ ] Write reviewed EF Core migrations (expand/contract) and a migrations-bundle step for deployment
+- [ ] Implement the transactional outbox, relay, and inbox/idempotency tables
+- [ ] Parameterize all queries (no raw string interpolation)
+- [ ] Define Valkey cache entries with explicit TTL, key versioning, invalidation, and outage fallback
+
+### API Contract
+
+- [ ] Define the versioned route scheme, JSON conventions, and Problem Details error contract (stable error codes)
+- [ ] Implement `Idempotency-Key` handling for checkout, payment, refund, and cancellation endpoints
+- [ ] Add pagination, sorting, and filtering conventions to every collection endpoint
+- [ ] Keep the OpenAPI document complete and add Spectral, `oasdiff`, and Schemathesis checks to CI
+- [ ] Externalize user-facing strings for localization and support `Accept-Language`
+
+### Security
+
+- [ ] Validate and sanitize all inputs at system boundaries
+- [ ] Enforce authentication by default (fallback policy) and object-ownership checks on every resource endpoint
+- [ ] Implement password hashing (Argon2id), JWT validation, and refresh-token rotation per `ai/SECURITY.md`
+- [ ] Add rate limiting for authentication, checkout, payment, and coupon endpoints
+- [ ] Verify payment webhook signatures and deduplicate provider events
+- [ ] Replace any hardcoded secrets with environment/secrets-manager references
+- [ ] Enable NuGet Audit, secret scanning, and CodeQL, and resolve critical CVEs
+
+### Tests
+
+- [ ] Write unit tests for all business logic
+- [ ] Write integration tests (Testcontainers) for PostgreSQL, Valkey, RabbitMQ, and the HTTP pipeline
+- [ ] Write idempotency tests for every handler and consumer that can be retried
+- [ ] Write authorization and abuse-case tests (ownership, price tampering, coupon over-redemption, replayed webhooks)
+- [ ] Quarantine or fix any flaky tests
+
+### Containers
+
+- [ ] Write the production `Dockerfile` (multi-stage, chiseled base, digest-pinned, non-root)
+- [ ] Write `docker-compose-dev.yml` with PostgreSQL, Valkey, RabbitMQ, and the observability backend
+- [ ] Write `docker-compose-prod.yml` with hardened services, internal networks, and secrets
+- [ ] Write the Kubernetes base and overlays (Kustomize) with security contexts, resources, PDBs, and network policies
+- [ ] Implement liveness, readiness, and startup endpoints; handle `SIGTERM` gracefully (consumers and outbox relay included)
+
+### Infrastructure as Code
+
+- [ ] Choose the cloud provider (AWS, Azure, Google Cloud, or OCI) and record the ADR, then review the matching `infrastructure/<provider>` template before first apply
+- [ ] Define all infrastructure changes declaratively (no manual changes)
+- [ ] Pin provider, module, and tool versions
+- [ ] Run `terraform validate`, `tflint`, and policy-as-code checks on the chosen provider template before applying changes
+- [ ] Commit the `.terraform.lock.hcl` generated by the first `terraform init`
+
+### Observability
+
+- [ ] Bootstrap the OpenTelemetry SDK (traces, metrics, logs over OTLP) with the mandatory resource attributes and no telemetry in the Domain layer
+- [ ] Instrument PostgreSQL, Valkey, RabbitMQ, the outbox relay, and background jobs, with trace propagation through the outbox
+- [ ] Define SLOs as code for the critical journeys (checkout, payment, sign-in, catalog) with burn-rate alerts, runbooks, and dashboards
+- [ ] Configure the Collector pipeline (redaction, tail sampling, security-log routing)
+- [ ] Verify no secrets or personal data appear in logs, spans, or metric labels
+
+---
+
+## Backlog
+
+<!-- Add future tasks here using: - [ ] Task description -->
+
+---
+
+## Completed
+
+<!-- Tasks move here once marked [x] for archival reference -->
