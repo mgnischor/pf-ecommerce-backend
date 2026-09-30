@@ -5,7 +5,7 @@ namespace Portfolio.SharedKernel.Domain;
 /// Defined in the domain; implemented in Infrastructure.
 /// </summary>
 /// <typeparam name="TAggregate">Aggregate root type.</typeparam>
-public interface IRepository<TAggregate>
+internal interface IRepository<TAggregate>
     where TAggregate : AggregateRoot
 {
     /// <summary>Loads an aggregate by identity, or <c>null</c> when not found or deleted.</summary>
