@@ -1,3 +1,5 @@
+using System.Text.Json;
+
 namespace Portfolio.IntegrationTests.Http;
 
 /// <summary>The OpenAPI document and Scalar are development-only (ai/SECURITY.md §6.6).</summary>
@@ -33,5 +35,26 @@ public sealed class DevelopmentApiReferenceTests : IDisposable
 
         response.StatusCode.ShouldBe(HttpStatusCode.OK);
         response.Headers.Contains("Content-Security-Policy").ShouldBeFalse();
+    }
+
+    [Fact]
+    public async Task Should_document_every_mapped_operation_in_the_openapi_document()
+    {
+        using var client = _development.CreateClient();
+
+        var json = await client.GetStringAsync(
+            new Uri("/api/v1/openapi/v1.json", UriKind.Relative),
+            TestContext.Current.CancellationToken
+        );
+        using var document = JsonDocument.Parse(json);
+        var operations = document
+            .RootElement.GetProperty("paths")
+            .EnumerateObject()
+            .SelectMany(path =>
+                path.Value.EnumerateObject().Select(operation => $"{operation.Name.ToUpperInvariant()} {path.Name}")
+            )
+            .ToArray();
+
+        operations.Length.ShouldBe(ApiEndpoints.All.Length);
     }
 }
