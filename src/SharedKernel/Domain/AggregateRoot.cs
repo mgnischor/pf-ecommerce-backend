@@ -4,13 +4,16 @@ namespace Portfolio.SharedKernel.Domain;
 /// Base class for aggregate roots. Adds optimistic-concurrency versioning
 /// and domain-event collection to <see cref="Entity"/>.
 /// </summary>
-public abstract class AggregateRoot : Entity
+internal abstract class AggregateRoot : Entity
 {
+    /// <summary>Version of a freshly created aggregate.</summary>
+    public const int InitialVersion = 1;
+
     private readonly List<IDomainEvent> _domainEvents = [];
 
     /// <summary>
-    /// Concurrency token, incremented on every state change.
-    /// Mapped to the mandatory <c>version</c> column.
+    /// Concurrency token: <see cref="InitialVersion"/> on creation and incremented exactly once per
+    /// state change, whether or not the change raises an event. Mapped to the mandatory <c>version</c> column.
     /// </summary>
     public int Version { get; protected set; }
 
@@ -18,9 +21,7 @@ public abstract class AggregateRoot : Entity
     public IReadOnlyCollection<IDomainEvent> DomainEvents => _domainEvents.AsReadOnly();
 
     /// <summary>EF Core constructor. Do not use in domain code.</summary>
-    protected AggregateRoot()
-    {
-    }
+    protected AggregateRoot() { }
 
     /// <summary>
     /// Initializes a new aggregate root.
@@ -30,10 +31,15 @@ public abstract class AggregateRoot : Entity
     protected AggregateRoot(Guid id, TimeProvider timeProvider)
         : base(id, timeProvider)
     {
+        Version = InitialVersion;
     }
 
+    /// <summary>Clears unpublished domain events after persistence.</summary>
+    public void ClearDomainEvents() => _domainEvents.Clear();
+
     /// <summary>
-    /// Records a domain event and advances the concurrency version.
+    /// Records a domain event. Does not touch the version: raise the event after the state change
+    /// so that <see cref="Version"/> already reflects it.
     /// </summary>
     /// <param name="domainEvent">The event that occurred.</param>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="domainEvent"/> is null.</exception>
@@ -41,9 +47,8 @@ public abstract class AggregateRoot : Entity
     {
         ArgumentNullException.ThrowIfNull(domainEvent);
         _domainEvents.Add(domainEvent);
-        Version++;
     }
 
-    /// <summary>Clears unpublished domain events after persistence.</summary>
-    public void ClearDomainEvents() => _domainEvents.Clear();
+    /// <inheritdoc />
+    protected override void OnModified() => Version++;
 }
