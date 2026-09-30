@@ -5,11 +5,13 @@ namespace Portfolio.Catalog.Domain;
 /// <summary>
 /// Catalog product aggregate root.
 /// Enforces its invariants on every state change:
-/// BR-CAT-001 (naming), BR-CAT-002 (positive price), BR-CAT-003 (lifecycle Draft → Active → Discontinued).
+/// BR-CAT-001 (naming and description), BR-CAT-002 (positive price), BR-CAT-003 (lifecycle Draft → Active → Discontinued).
+/// SKU format (BR-CAT-004) is enforced by <see cref="Sku"/>; SKU uniqueness (BR-CAT-005) needs the repository
+/// and is enforced by the Application layer plus a partial unique index.
 /// Cross-aggregate references use identifiers only; the price snapshot for orders
 /// is taken from <see cref="Price"/> at purchase time.
 /// </summary>
-public sealed class Product : AggregateRoot
+internal sealed class Product : AggregateRoot
 {
     /// <summary>Minimum length of a product name (BR-CAT-001).</summary>
     public const int MinNameLength = 3;
@@ -38,18 +40,10 @@ public sealed class Product : AggregateRoot
     /// <summary>EF Core constructor. Do not use in domain code.</summary>
     // Justification for CS8618 suppression: properties are populated by EF Core materialization.
 #pragma warning disable CS8618
-    private Product()
-    {
-    }
+    private Product() { }
 #pragma warning restore CS8618
 
-    private Product(
-        Guid id,
-        string name,
-        Sku sku,
-        Money price,
-        string? description,
-        TimeProvider timeProvider)
+    private Product(Guid id, string name, Sku sku, Money price, string? description, TimeProvider timeProvider)
         : base(id, timeProvider)
     {
         Name = name;
@@ -65,40 +59,38 @@ public sealed class Product : AggregateRoot
     /// <param name="name">Display name (3–200 characters).</param>
     /// <param name="sku">Stock-keeping unit.</param>
     /// <param name="price">Sell price. Amount must be positive.</param>
-    /// <param name="description">Optional description (max 2000 characters).</param>
+    /// <param name="description">Optional description (max 2000 characters). Blank is stored as <c>null</c>.</param>
     /// <param name="timeProvider">Source of UTC time.</param>
     /// <returns>A successful result with the product, or a failure describing the violated rule.</returns>
     public static Result<Product> Create(
-        string name,
+        string? name,
         Sku sku,
         Money price,
         string? description,
-        TimeProvider timeProvider)
+        TimeProvider timeProvider
+    )
     {
         ArgumentNullException.ThrowIfNull(sku);
         ArgumentNullException.ThrowIfNull(price);
         ArgumentNullException.ThrowIfNull(timeProvider);
 
-        var nameError = ValidateName(name);
-        if (nameError is not null)
+        if (ValidateName(name, out var normalizedName) is { } nameError)
         {
             return Result<Product>.Failure(nameError);
         }
 
-        var descriptionError = ValidateDescription(description);
-        if (descriptionError is not null)
+        if (ValidateDescription(description, out var normalizedDescription) is { } descriptionError)
         {
             return Result<Product>.Failure(descriptionError);
         }
 
-        var priceError = ValidatePrice(price);
-        if (priceError is not null)
+        if (ValidatePrice(price) is { } priceError)
         {
             return Result<Product>.Failure(priceError);
         }
 
-        var product = new Product(NewId(), name.Trim(), sku, price, description?.Trim(), timeProvider);
-        product.AddDomainEvent(ProductCreated.For(product, timeProvider));
+        var product = new Product(NewId(timeProvider), normalizedName, sku, price, normalizedDescription, timeProvider);
+        product.AddDomainEvent(ProductCreated.For(product));
 
         return Result<Product>.Success(product);
     }
@@ -108,17 +100,38 @@ public sealed class Product : AggregateRoot
     /// </summary>
     /// <param name="name">New display name (3–200 characters).</param>
     /// <param name="timeProvider">Source of UTC time.</param>
-    public Result Rename(string name, TimeProvider timeProvider)
+    public Result Rename(string? name, TimeProvider timeProvider)
     {
         ArgumentNullException.ThrowIfNull(timeProvider);
 
-        var error = ValidateName(name);
+        var error = ValidateName(name, out var normalizedName);
         if (error is not null)
         {
             return Result.Failure(error);
         }
 
-        Name = name.Trim();
+        Name = normalizedName;
+        MarkUpdated(timeProvider);
+
+        return Result.Success();
+    }
+
+    /// <summary>
+    /// Changes the description (BR-CAT-001).
+    /// </summary>
+    /// <param name="description">New description (max 2000 characters). Blank clears it.</param>
+    /// <param name="timeProvider">Source of UTC time.</param>
+    public Result ChangeDescription(string? description, TimeProvider timeProvider)
+    {
+        ArgumentNullException.ThrowIfNull(timeProvider);
+
+        var error = ValidateDescription(description, out var normalizedDescription);
+        if (error is not null)
+        {
+            return Result.Failure(error);
+        }
+
+        Description = normalizedDescription;
         MarkUpdated(timeProvider);
 
         return Result.Success();
@@ -148,7 +161,7 @@ public sealed class Product : AggregateRoot
         var oldPrice = Price;
         Price = price;
         MarkUpdated(timeProvider);
-        AddDomainEvent(ProductPriceChanged.For(this, oldPrice, timeProvider));
+        AddDomainEvent(ProductPriceChanged.For(this, oldPrice));
 
         return Result.Success();
     }
@@ -177,16 +190,13 @@ public sealed class Product : AggregateRoot
     {
         if (!IsValidTransition(Status, status))
         {
-            return Result.Failure(Error.Conflict(
-                "PRODUCT_INVALID_STATUS_TRANSITION",
-                $"Cannot transition a product from '{Status}' to '{status}'.",
-                "BR-CAT-003"));
+            return Result.Failure(ProductErrors.InvalidStatusTransition(Status, status));
         }
 
         var from = Status;
         Status = status;
         MarkUpdated(timeProvider);
-        AddDomainEvent(ProductStatusChanged.For(this, from, timeProvider));
+        AddDomainEvent(ProductStatusChanged.For(this, from));
 
         return Result.Success();
     }
@@ -199,48 +209,24 @@ public sealed class Product : AggregateRoot
             _ => false,
         };
 
-    private static Error? ValidateName(string name)
+    private static Error? ValidateName(string? name, out string normalized)
     {
-        if (string.IsNullOrWhiteSpace(name))
+        normalized = name?.Trim() ?? string.Empty;
+
+        if (normalized.Length == 0)
         {
-            return Error.Validation(
-                "PRODUCT_NAME_REQUIRED", "Product name is required.", "name", "BR-CAT-001");
+            return ProductErrors.NameRequired;
         }
 
-        if (name.Trim().Length is < MinNameLength or > MaxNameLength)
-        {
-            return Error.Validation(
-                "PRODUCT_NAME_LENGTH",
-                $"Product name must be between {MinNameLength} and {MaxNameLength} characters.",
-                "name",
-                "BR-CAT-001");
-        }
-
-        return null;
+        return normalized.Length is < MinNameLength or > MaxNameLength ? ProductErrors.NameLength : null;
     }
 
-    private static Error? ValidateDescription(string? description)
+    private static Error? ValidateDescription(string? description, out string? normalized)
     {
-        if (description is not null && description.Trim().Length > MaxDescriptionLength)
-        {
-            return Error.Validation(
-                "PRODUCT_DESCRIPTION_TOO_LONG",
-                $"Product description must not exceed {MaxDescriptionLength} characters.",
-                "description",
-                "BR-CAT-001");
-        }
+        normalized = string.IsNullOrWhiteSpace(description) ? null : description.Trim();
 
-        return null;
+        return normalized is { Length: > MaxDescriptionLength } ? ProductErrors.DescriptionTooLong : null;
     }
 
-    private static Error? ValidatePrice(Money price)
-    {
-        if (price.Amount <= 0)
-        {
-            return Error.Validation(
-                "PRODUCT_PRICE_MUST_BE_POSITIVE", "Product price must be greater than zero.", "price", "BR-CAT-002");
-        }
-
-        return null;
-    }
+    private static Error? ValidatePrice(Money price) => price.IsPositive ? null : ProductErrors.PriceMustBePositive;
 }
