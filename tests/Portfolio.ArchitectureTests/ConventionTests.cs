@@ -1,5 +1,6 @@
 using System.Reflection;
 using NetArchTest.Rules;
+using Portfolio.SharedKernel.API;
 using Portfolio.SharedKernel.Domain;
 
 namespace Portfolio.ArchitectureTests;
@@ -45,7 +46,13 @@ public sealed class ConventionTests
     [Fact]
     public void Handlers_should_be_sealed_classes_in_the_application_layer()
     {
-        var handlers = Types.InAssembly(App).That().HaveNameEndingWith("Handler", StringComparison.Ordinal);
+        // Infrastructure may define framework handlers (for example authentication handlers); the rule is about use cases.
+        var handlers = Types
+            .InAssembly(App)
+            .That()
+            .HaveNameEndingWith("Handler", StringComparison.Ordinal)
+            .And()
+            .DoNotResideInNamespaceMatching(@"\.Infrastructure(\.|$)");
 
         var sealedResult = handlers.Should().BeSealed().GetResult();
         var layerResult = handlers
@@ -74,16 +81,65 @@ public sealed class ConventionTests
     }
 
     [Fact]
-    public void Types_should_be_internal_unless_they_are_a_documented_public_contract()
+    public void Types_outside_the_api_layer_should_be_internal_unless_they_are_a_documented_public_contract()
     {
         var result = Types
             .InAssembly(App)
             .That()
             .ResideInNamespaceMatching(@"^Portfolio\.")
             .And()
+            .DoNotResideInNamespaceMatching(@"\.API(\.|$)") // MVC only discovers public controllers; contracts are their signatures.
+            .And()
             .DoNotHaveName(nameof(DomainException)) // Sonar S3871 requires exceptions to be public.
             .Should()
             .NotBePublic()
+            .GetResult();
+
+        result.IsSuccessful.ShouldBeTrue(Describe(result));
+    }
+
+    [Fact]
+    public void Controllers_should_be_sealed_api_controllers_living_in_the_api_layer()
+    {
+        var controllers = Types.InAssembly(App).That().Inherit(typeof(ApiControllerBase));
+
+        var sealedResult = controllers.Should().BeSealed().GetResult();
+        var layerResult = controllers
+            .Should()
+            .ResideInNamespaceMatching(@"^Portfolio\.\w+\.API\.Controllers$")
+            .GetResult();
+        var nameResult = controllers.Should().HaveNameEndingWith("Controller", StringComparison.Ordinal).GetResult();
+
+        sealedResult.IsSuccessful.ShouldBeTrue(Describe(sealedResult));
+        layerResult.IsSuccessful.ShouldBeTrue(Describe(layerResult));
+        nameResult.IsSuccessful.ShouldBeTrue(Describe(nameResult));
+    }
+
+    [Fact]
+    public void Every_controller_should_derive_from_the_shared_api_controller_base()
+    {
+        var result = Types
+            .InAssembly(App)
+            .That()
+            .HaveNameEndingWith("Controller", StringComparison.Ordinal)
+            .And()
+            .DoNotHaveName(nameof(ApiControllerBase))
+            .Should()
+            .Inherit(typeof(ApiControllerBase))
+            .GetResult();
+
+        result.IsSuccessful.ShouldBeTrue(Describe(result));
+    }
+
+    [Fact]
+    public void Api_contracts_should_live_in_the_contracts_namespace_and_not_expose_domain_types()
+    {
+        var result = Types
+            .InAssembly(App)
+            .That()
+            .ResideInNamespaceMatching(@"^Portfolio\.\w+\.API\.Contracts$")
+            .ShouldNot()
+            .HaveDependencyOnAny([.. Contexts.Names.Select(context => $"Portfolio.{context}.Domain")])
             .GetResult();
 
         result.IsSuccessful.ShouldBeTrue(Describe(result));
