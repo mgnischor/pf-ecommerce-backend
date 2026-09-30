@@ -1,2 +1,4 @@
 ai/**
 src/**
+**/packages.lock.json
+TestResults/
