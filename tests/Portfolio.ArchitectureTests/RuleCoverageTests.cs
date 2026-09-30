@@ -16,6 +16,9 @@ public sealed class RuleCoverageTests
     [InlineData(@"^Portfolio\.SharedKernel\.Application(\.|$)")]
     [InlineData(@"^Portfolio\.Catalog\.Domain(\.|$)")]
     [InlineData(@"^Portfolio\.Catalog\.Application(\.|$)")]
+    [InlineData(@"^Portfolio\.Catalog\.API\.Controllers$")]
+    [InlineData(@"^Portfolio\.Catalog\.API\.Contracts$")]
+    [InlineData(@"^Portfolio\.SharedKernel\.API(\.|$)")]
     public void Namespace_patterns_used_by_the_rules_should_select_existing_types(string pattern)
     {
         var selected = Types.InAssembly(App).That().ResideInNamespaceMatching(pattern).GetTypes();
