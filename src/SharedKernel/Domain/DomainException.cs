@@ -7,17 +7,16 @@ namespace Portfolio.SharedKernel.Domain;
 public class DomainException : Exception
 {
     /// <summary>Initializes a new domain exception.</summary>
+    public DomainException() { }
+
+    /// <summary>Initializes a new domain exception.</summary>
     /// <param name="message">Human-readable description.</param>
     public DomainException(string message)
-        : base(message)
-    {
-    }
+        : base(message) { }
 
     /// <summary>Initializes a new domain exception with an inner cause.</summary>
     /// <param name="message">Human-readable description.</param>
     /// <param name="innerException">Underlying cause.</param>
     public DomainException(string message, Exception innerException)
-        : base(message, innerException)
-    {
-    }
+        : base(message, innerException) { }
 }
