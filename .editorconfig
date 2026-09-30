@@ -51,6 +51,14 @@ dotnet_diagnostic.MA0004.severity = none
 # Method names in the Application layer follow the domain language of use cases.
 dotnet_diagnostic.CA1062.severity = none
 
+# Public members (controller actions) are the API surface: their parameters define the contract even
+# while an operation is still a stub.
+dotnet_code_quality_unused_parameters = non_public
+
+# Contracts are grouped per resource (enums and records together) instead of one file per type.
+[src/**/API/Contracts/*.cs]
+dotnet_diagnostic.MA0048.severity = none
+
 # --- Tests -------------------------------------------------------------------
 [tests/**.cs]
 # Test names follow Should_<behavior>_when_<condition> (ai/TESTS.md §3.3).
