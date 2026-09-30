@@ -25,22 +25,19 @@ This file is the **single source of truth for task progress** during active deve
 ### Architecture
 
 - [ ] Define bounded contexts, the Context Map (`docs/`), and the subdomain classification ADR
-- [ ] Add architecture tests enforcing the dependency flow (API → Application → Domain, Infrastructure implementing Domain-defined interfaces) and context boundaries
 - [ ] Record the messaging-library and in-process dispatcher decisions as ADRs
 
 ### Business Rules
 
-- [ ] Identify and document domain invariants as `BR-` rules in `docs/business-rules/`
+- [~] Identify and document domain invariants as `BR-` rules in `docs/business-rules/`
 - [~] Implement invariants inside aggregates and entities
 - [ ] Define state machines for Order, Payment, Shipment, Stock Reservation, and Cart
 - [ ] Verify each business rule is traceable to a requirement
 
 ### Code Quality
 
-- [ ] Add `global.json`, `Directory.Build.props`, `Directory.Packages.props`, and `.editorconfig` (analyzers, nullable, warnings as errors, central package management, lock files)
 - [ ] Apply SOLID principles across all new code
 - [ ] Achieve ≥ 80% line coverage and ≥ 70% branch coverage
-- [ ] Resolve all analyzer and formatting (CSharpier/Prettier) warnings
 
 ### Database
 
@@ -54,7 +51,7 @@ This file is the **single source of truth for task progress** during active deve
 
 ### API Contract
 
-- [ ] Define the versioned route scheme, JSON conventions, and Problem Details error contract (stable error codes)
+- [~] Define the versioned route scheme, JSON conventions, and Problem Details error contract (stable error codes)
 - [ ] Implement `Idempotency-Key` handling for checkout, payment, refund, and cancellation endpoints
 - [ ] Add pagination, sorting, and filtering conventions to every collection endpoint
 - [ ] Keep the OpenAPI document complete and add Spectral, `oasdiff`, and Schemathesis checks to CI
@@ -68,11 +65,11 @@ This file is the **single source of truth for task progress** during active deve
 - [ ] Add rate limiting for authentication, checkout, payment, and coupon endpoints
 - [ ] Verify payment webhook signatures and deduplicate provider events
 - [ ] Replace any hardcoded secrets with environment/secrets-manager references
-- [ ] Enable NuGet Audit, secret scanning, and CodeQL, and resolve critical CVEs
+- [~] Enable NuGet Audit, secret scanning, and CodeQL, and resolve critical CVEs
 
 ### Tests
 
-- [ ] Write unit tests for all business logic
+- [~] Write unit tests for all business logic
 - [ ] Write integration tests (Testcontainers) for PostgreSQL, Valkey, RabbitMQ, and the HTTP pipeline
 - [ ] Write idempotency tests for every handler and consumer that can be retried
 - [ ] Write authorization and abuse-case tests (ownership, price tampering, coupon over-redemption, replayed webhooks)
@@ -115,3 +112,6 @@ This file is the **single source of truth for task progress** during active deve
 <!-- Tasks move here once marked [x] for archival reference -->
 
 - [x] Create the shared primitives in `SharedKernel` (`Entity`, `AggregateRoot`, `Result`, `Money`, event abstractions)
+- [x] Add architecture tests enforcing the dependency flow (API → Application → Domain, Infrastructure implementing Domain-defined interfaces) and context boundaries
+- [x] Add `global.json`, `Directory.Build.props`, `Directory.Packages.props`, and `.editorconfig` (analyzers, nullable, warnings as errors, central package management, lock files)
+- [x] Resolve all analyzer and formatting (CSharpier/Prettier) warnings
