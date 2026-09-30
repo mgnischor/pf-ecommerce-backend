@@ -6,10 +6,10 @@ namespace Portfolio.Catalog.Domain;
 /// Persistence abstraction for the <see cref="Product"/> aggregate.
 /// Defined in the domain; implemented in Infrastructure.
 /// </summary>
-public interface IProductRepository : IRepository<Product>
+internal interface IProductRepository : IRepository<Product>
 {
     /// <summary>
-    /// Finds an active product by SKU, or <c>null</c> when not found.
+    /// Finds an active (not deleted) product by SKU, or <c>null</c> when not found.
     /// </summary>
     /// <param name="sku">Stock-keeping unit to search for.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
