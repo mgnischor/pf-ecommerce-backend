@@ -119,9 +119,20 @@ Development standards live in the `ai/` folder and are indexed by `AGENTS.md`:
 
 Read the relevant document(s) before writing code, not after.
 
+## Domain Model
+
+Implemented so far (see `ai/TASKS.md` for full progress):
+
+- `SharedKernel` — `Entity` (traceability), `AggregateRoot` (version + domain events),
+  `ValueObject`, `IDomainEvent`, `Result`/`Error`, `DomainException`, `IRepository`, `Money`.
+- `Catalog` — `Product` aggregate (`Sku`, `ProductStatus`, `IProductRepository`) enforcing
+  BR-CAT-001 (naming), BR-CAT-002 (positive price), BR-CAT-003 (Draft → Active → Discontinued),
+  with `ProductCreated`, `ProductPriceChanged`, and `ProductStatusChanged` domain events.
+
 ## Roadmap
 
-- [ ] Domain aggregates per bounded context
+- [x] SharedKernel primitives (`Entity`, `AggregateRoot`, `Result`, `Money`, event abstractions)
+- [~] Domain aggregates per bounded context (Catalog `Product` done; remaining contexts pending)
 - [ ] EF Core mappings + versioned migrations
 - [ ] Transactional outbox + RabbitMQ integration events
 - [ ] Valkey caching with explicit TTL/invalidation
