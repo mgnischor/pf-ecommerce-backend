@@ -13,6 +13,7 @@ The standards in `ai/` are non-negotiable. Do not generate code, architecture, o
 - C# / .NET 10 modular monolith, single project `Portfolio.csproj` (root namespace `Portfolio`), source under `src/<BoundedContext>/{Domain,Application,Infrastructure,API}`.
 - Configuration lives in `configuration/`, launch settings in `properties/`, Kubernetes manifests in `kubernetes/`, Compose files at the repository root.
 - Build and run: `dotnet restore`, `dotnet build`, `dotnet run --project Portfolio.csproj`. Quality gates (analyzers, CSharpier, tests, architecture tests, coverage) are defined in `ai/CODE.md §2` and `ai/TESTS.md`.
+- Tests are under `tests/` (`Portfolio.UnitTests`, `Portfolio.ArchitectureTests`, `Portfolio.IntegrationTests`) and run with `dotnet test --project tests/<name>` (xUnit v3 on Microsoft.Testing.Platform, enabled in `global.json`). `dotnet build -warnaserror` and `csharpier check .` must be clean; there is deliberately no solution file next to `Portfolio.csproj` (it would make bare `dotnet build` ambiguous).
 - In development the API reference is at `/api/v1/docs` (Scalar) and `/api/v1/openapi/v1.json`; both are development-only.
 - There is no front end in this repository.
 
@@ -24,12 +25,12 @@ The standards in `ai/` are non-negotiable. Do not generate code, architecture, o
 2. **Read the relevant `ai/` document(s) before producing output.** When several domains apply (for example, an endpoint that writes to the database and calls a payment provider), apply all of them together.
 3. **Comply.** If a request conflicts with a standard, follow the standard, explain the conflict, and ask for explicit justification before proceeding.
 
-| Situation | Required action |
-| --- | --- |
-| Request conflicts with a standard | Follow the standard; explain the conflict to the developer |
-| Request requires an exception | Require all five fields every Definition of Done demands — owner, scope, risk, rationale, expiration date — before proceeding; a generic justification is not sufficient |
-| Standard is ambiguous | Apply the most conservative, secure interpretation |
-| Multiple standards apply | Apply all of them; flag any contradictions |
+| Situation                         | Required action                                                                                                                                                          |
+| --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Request conflicts with a standard | Follow the standard; explain the conflict to the developer                                                                                                               |
+| Request requires an exception     | Require all five fields every Definition of Done demands — owner, scope, risk, rationale, expiration date — before proceeding; a generic justification is not sufficient |
+| Standard is ambiguous             | Apply the most conservative, secure interpretation                                                                                                                       |
+| Multiple standards apply          | Apply all of them; flag any contradictions                                                                                                                               |
 
 Prefer small, reversible, incremental changes over large rewrites.
 
@@ -39,10 +40,10 @@ Prefer small, reversible, incremental changes over large rewrites.
 
 `ai/TASKS.md` is the **single source of truth for task progress**. Read it at the start of every session.
 
-| Event | Required action |
-| --- | --- |
-| Starting a task | Change `- [ ]` to `- [~]` |
-| Completing a task | Change `- [~]` to `- [x]` |
+| Event             | Required action                                    |
+| ----------------- | -------------------------------------------------- |
+| Starting a task   | Change `- [ ]` to `- [~]`                          |
+| Completing a task | Change `- [~]` to `- [x]`                          |
 | Blocked on a task | Leave unchecked; append `<!-- BLOCKED: reason -->` |
 
 - Never skip a checkbox update; record every transition immediately.
