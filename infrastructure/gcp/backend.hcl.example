@@ -1,0 +1,6 @@
+# Copy to backend.<environment>.hcl and run:
+#   terraform init -backend-config=backend.production.hcl
+# The state bucket is created once, out of band: object versioning on, uniform bucket-level access,
+# public access prevention enforced, CMEK, and IAM limited to the CI identity.
+bucket = "pf-ecommerce-tfstate-<project-id>"
+prefix = "platform/production"
