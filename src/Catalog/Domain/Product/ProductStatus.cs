@@ -4,7 +4,7 @@ namespace Portfolio.Catalog.Domain;
 /// Lifecycle status of a <see cref="Product"/> (BR-CAT-003).
 /// Valid transitions: Draft → Active → Discontinued.
 /// </summary>
-public enum ProductStatus
+internal enum ProductStatus
 {
     /// <summary>Created but not yet sellable.</summary>
     Draft = 0,
