@@ -1,6 +1,261 @@
 @Portfolio_HostAddress = http://localhost:5223
+@ApiBase = {{Portfolio_HostAddress}}/api/v1
 
-GET {{Portfolio_HostAddress}}/
+# Variables used by the requests below. The ids are placeholders (fake values, no real data).
+# Set @Token to the access token returned by "Sign in" once authentication is implemented.
+# Until then every protected endpoint answers 401, and every mapped operation answers 501.
+@Token = replace-with-an-access-token
+@ProductId = 0199f3a2-7c10-7d3e-8a51-2b9d4c6e1f01
+@CartId = 0199f3a2-7c10-7d3e-8a51-2b9d4c6e1f02
+@ItemId = 0199f3a2-7c10-7d3e-8a51-2b9d4c6e1f03
+@CheckoutId = 0199f3a2-7c10-7d3e-8a51-2b9d4c6e1f04
+@OrderId = 0199f3a2-7c10-7d3e-8a51-2b9d4c6e1f05
+@PaymentId = 0199f3a2-7c10-7d3e-8a51-2b9d4c6e1f06
+@AddressId = 0199f3a2-7c10-7d3e-8a51-2b9d4c6e1f07
+@Sku = CAF-600-PRT
+@ETag = "1"
+
+### ========================================================================
+### Identity
+### ========================================================================
+
+### 1. Sign in (anonymous, rate limited)
+POST {{ApiBase}}/auth/tokens
+Content-Type: application/json
 Accept: application/json
 
-###
+{
+    "email": "ana.souza@example.com",
+    "password": "example-password-not-real"
+}
+
+### ========================================================================
+### Catalog
+### ========================================================================
+
+### 2. List products (anonymous; cursor pagination, filters, sort)
+GET {{ApiBase}}/products?limit=20&q=cafeteira&sort=-createdAt
+Accept: application/json
+
+### 3. Get a product
+GET {{ApiBase}}/products/{{ProductId}}
+Accept: application/json
+
+### 4. Create a product (catalog staff; Idempotency-Key required)
+POST {{ApiBase}}/products
+Authorization: Bearer {{Token}}
+Idempotency-Key: {{$guid}}
+Content-Type: application/json
+Accept: application/json
+
+{
+    "name": "Cafeteira Elétrica 600ml",
+    "sku": "{{Sku}}",
+    "price": { "amount": "189.90", "currency": "BRL" },
+    "description": "Cafeteira elétrica com filtro permanente."
+}
+
+### 5. Rename a product or change its description (JSON Merge Patch; If-Match required)
+PATCH {{ApiBase}}/products/{{ProductId}}
+Authorization: Bearer {{Token}}
+If-Match: {{ETag}}
+Content-Type: application/merge-patch+json
+Accept: application/json
+
+{
+    "name": "Cafeteira Elétrica Premium 600ml"
+}
+
+### 6. Change the sell price (If-Match required)
+PUT {{ApiBase}}/products/{{ProductId}}/price
+Authorization: Bearer {{Token}}
+If-Match: {{ETag}}
+Content-Type: application/json
+Accept: application/json
+
+{
+    "price": { "amount": "174.90", "currency": "BRL" }
+}
+
+### 7. Activate a draft product (BR-CAT-003)
+POST {{ApiBase}}/products/{{ProductId}}/activation
+Authorization: Bearer {{Token}}
+If-Match: {{ETag}}
+Accept: application/json
+
+### 8. Discontinue an active product (BR-CAT-003)
+POST {{ApiBase}}/products/{{ProductId}}/discontinuation
+Authorization: Bearer {{Token}}
+If-Match: {{ETag}}
+Accept: application/json
+
+### 9. Delete a product (soft delete; Idempotency-Key and If-Match required)
+DELETE {{ApiBase}}/products/{{ProductId}}
+Authorization: Bearer {{Token}}
+Idempotency-Key: {{$guid}}
+If-Match: {{ETag}}
+
+### ========================================================================
+### Cart
+### ========================================================================
+
+### 10. Open a cart
+POST {{ApiBase}}/carts
+Authorization: Bearer {{Token}}
+Content-Type: application/json
+Accept: application/json
+
+{
+    "currency": "BRL"
+}
+
+### 11. Get a cart (prices are computed by the server)
+GET {{ApiBase}}/carts/{{CartId}}
+Authorization: Bearer {{Token}}
+Accept: application/json
+
+### 12. Add a product to the cart
+POST {{ApiBase}}/carts/{{CartId}}/items
+Authorization: Bearer {{Token}}
+Content-Type: application/json
+Accept: application/json
+
+{
+    "productId": "{{ProductId}}",
+    "quantity": 2
+}
+
+### 13. Remove a line from the cart
+DELETE {{ApiBase}}/carts/{{CartId}}/items/{{ItemId}}
+Authorization: Bearer {{Token}}
+Accept: application/json
+
+### ========================================================================
+### Checkout
+### ========================================================================
+
+### 14. Start the checkout of a cart (asynchronous: 202 + Location; Idempotency-Key required)
+POST {{ApiBase}}/carts/{{CartId}}/checkout
+Authorization: Bearer {{Token}}
+Idempotency-Key: {{$guid}}
+Content-Type: application/json
+Accept: application/json
+
+{
+    "shippingAddressId": "{{AddressId}}",
+    "shippingMethodCode": "standard",
+    "paymentMethodToken": "tok_test_example_0000"
+}
+
+### 15. Get a checkout (poll until it completes or fails)
+GET {{ApiBase}}/checkouts/{{CheckoutId}}
+Authorization: Bearer {{Token}}
+Accept: application/json
+
+### ========================================================================
+### Ordering
+### ========================================================================
+
+### 16. List my orders
+GET {{ApiBase}}/orders?limit=20&status=paid&createdFrom=2026-09-01&sort=-placedAt
+Authorization: Bearer {{Token}}
+Accept: application/json
+
+### 17. Get an order
+GET {{ApiBase}}/orders/{{OrderId}}
+Authorization: Bearer {{Token}}
+Accept: application/json
+
+### 18. Cancel an order (Idempotency-Key and If-Match required)
+POST {{ApiBase}}/orders/{{OrderId}}/cancellation
+Authorization: Bearer {{Token}}
+Idempotency-Key: {{$guid}}
+If-Match: {{ETag}}
+Content-Type: application/json
+Accept: application/json
+
+{
+    "reasonCode": "changedMind",
+    "note": "Comprei o produto errado."
+}
+
+### ========================================================================
+### Billing
+### ========================================================================
+
+### 19. Get a payment (masked payment-method data)
+GET {{ApiBase}}/payments/{{PaymentId}}
+Authorization: Bearer {{Token}}
+Accept: application/json
+
+### 20. Refund a payment (finance staff; Idempotency-Key and If-Match required)
+POST {{ApiBase}}/payments/{{PaymentId}}/refunds
+Authorization: Bearer {{Token}}
+Idempotency-Key: {{$guid}}
+If-Match: {{ETag}}
+Content-Type: application/json
+Accept: application/json
+
+{
+    "amount": { "amount": "50.00", "currency": "BRL" },
+    "reasonCode": "damagedItem"
+}
+
+### 21. Payment-provider webhook (anonymous; authenticity comes from the signature)
+POST {{ApiBase}}/payments/webhooks/example-provider
+X-Webhook-Signature: sha256=0000000000000000000000000000000000000000000000000000000000000000
+Content-Type: application/json
+
+{
+    "id": "evt_test_0001",
+    "type": "payment.captured",
+    "data": { "paymentReference": "pay_test_0001" }
+}
+
+### ========================================================================
+### Inventory
+### ========================================================================
+
+### 22. Get the stock level of a SKU (catalog staff)
+GET {{ApiBase}}/inventory/items/{{Sku}}
+Authorization: Bearer {{Token}}
+Accept: application/json
+
+### 23. Adjust stock (append-only movement; Idempotency-Key and If-Match required)
+POST {{ApiBase}}/inventory/items/{{Sku}}/adjustments
+Authorization: Bearer {{Token}}
+Idempotency-Key: {{$guid}}
+If-Match: {{ETag}}
+Content-Type: application/json
+Accept: application/json
+
+{
+    "delta": -3,
+    "reasonCode": "damage"
+}
+
+### ========================================================================
+### Shipping
+### ========================================================================
+
+### 24. List the shipments of an order
+GET {{ApiBase}}/orders/{{OrderId}}/shipments?limit=20
+Authorization: Bearer {{Token}}
+Accept: application/json
+
+### ========================================================================
+### Customers
+### ========================================================================
+
+### 25. Get my profile (masked contact data)
+GET {{ApiBase}}/customers/me
+Authorization: Bearer {{Token}}
+Accept: application/json
+
+### ========================================================================
+### Development only
+### ========================================================================
+
+### OpenAPI document
+GET {{ApiBase}}/openapi/v1.json
+Accept: application/json
