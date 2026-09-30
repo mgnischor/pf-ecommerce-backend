@@ -63,17 +63,48 @@ public sealed class DependencyDirectionTests
         result.IsSuccessful.ShouldBeTrue(Describe(result));
     }
 
-    [Fact]
-    public void Shared_kernel_should_not_depend_on_any_bounded_context_or_framework()
+    [Theory]
+    [MemberData(nameof(Contexts.All), MemberType = typeof(Contexts))]
+    public void Api_should_not_depend_on_domain_or_infrastructure(string context)
+    {
+        var result = Types
+            .InAssembly(App)
+            .That()
+            .ResideInNamespaceMatching(Namespace.Layer(context, "API"))
+            .ShouldNot()
+            .HaveDependencyOnAny($"Portfolio.{context}.Domain", $"Portfolio.{context}.Infrastructure")
+            .GetResult();
+
+        result.IsSuccessful.ShouldBeTrue(Describe(result));
+    }
+
+    [Theory]
+    [InlineData("Domain")]
+    [InlineData("Application")]
+    public void Shared_kernel_domain_and_application_should_not_depend_on_any_context_or_framework(string layer)
     {
         var forbidden = Frameworks.Concat(Contexts.Names.Select(context => $"Portfolio.{context}")).ToArray();
 
         var result = Types
             .InAssembly(App)
             .That()
-            .ResideInNamespaceMatching(Namespace.Context("SharedKernel"))
+            .ResideInNamespaceMatching(Namespace.Layer("SharedKernel", layer))
             .ShouldNot()
             .HaveDependencyOnAny(forbidden)
+            .GetResult();
+
+        result.IsSuccessful.ShouldBeTrue(Describe(result));
+    }
+
+    [Fact]
+    public void Shared_kernel_api_should_not_depend_on_any_context()
+    {
+        var result = Types
+            .InAssembly(App)
+            .That()
+            .ResideInNamespaceMatching(Namespace.Layer("SharedKernel", "API"))
+            .ShouldNot()
+            .HaveDependencyOnAny([.. Contexts.Names.Select(context => $"Portfolio.{context}")])
             .GetResult();
 
         result.IsSuccessful.ShouldBeTrue(Describe(result));
