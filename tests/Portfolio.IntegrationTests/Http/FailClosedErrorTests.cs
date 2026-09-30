@@ -1,4 +1,5 @@
 using System.Diagnostics.CodeAnalysis;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
@@ -54,6 +55,7 @@ public sealed class FailClosedErrorTests : IDisposable
 
 /// <summary>Throws on purpose. Top-level because MVC does not discover nested controllers.</summary>
 [ApiController]
+[AllowAnonymous]
 [Route("test-only/explode")]
 public sealed class ExplodingController : ControllerBase
 {
