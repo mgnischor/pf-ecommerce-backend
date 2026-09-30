@@ -1,0 +1,9 @@
+# Copy to backend.<environment>.hcl and run:
+#   terraform init -backend-config=backend.production.hcl
+# The state bucket is created once, out of band: versioning enabled, private (NoPublicAccess),
+# encrypted with a customer-managed key, IAM limited to the CI identity. Check the current
+# `oci` backend arguments in the Terraform documentation before first use.
+bucket    = "pf-ecommerce-tfstate"
+namespace = "<object-storage-namespace>"
+key       = "platform/production/terraform.tfstate"
+region    = "us-ashburn-1"
