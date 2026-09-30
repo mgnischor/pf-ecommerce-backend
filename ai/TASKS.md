@@ -25,14 +25,13 @@ This file is the **single source of truth for task progress** during active deve
 ### Architecture
 
 - [ ] Define bounded contexts, the Context Map (`docs/`), and the subdomain classification ADR
-- [ ] Create the shared primitives in `SharedKernel` (`Entity`, `AggregateRoot`, `Result`, `Money`, event abstractions)
 - [ ] Add architecture tests enforcing the dependency flow (API → Application → Domain, Infrastructure implementing Domain-defined interfaces) and context boundaries
 - [ ] Record the messaging-library and in-process dispatcher decisions as ADRs
 
 ### Business Rules
 
 - [ ] Identify and document domain invariants as `BR-` rules in `docs/business-rules/`
-- [ ] Implement invariants inside aggregates and entities
+- [~] Implement invariants inside aggregates and entities
 - [ ] Define state machines for Order, Payment, Shipment, Stock Reservation, and Cart
 - [ ] Verify each business rule is traceable to a requirement
 
@@ -114,3 +113,5 @@ This file is the **single source of truth for task progress** during active deve
 ## Completed
 
 <!-- Tasks move here once marked [x] for archival reference -->
+
+- [x] Create the shared primitives in `SharedKernel` (`Entity`, `AggregateRoot`, `Result`, `Money`, event abstractions)
