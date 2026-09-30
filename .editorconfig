@@ -1,0 +1,64 @@
+# EditorConfig is awesome: https://EditorConfig.org
+# Formatting is enforced by CSharpier (C#) and Prettier (everything else); see ai/CODE.md §2 and §4.3.
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+indent_style = space
+indent_size = 4
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+[*.{yml,yaml}]
+indent_size = 2
+
+[*.{csproj,props,targets}]
+indent_size = 2
+
+[*.md]
+trim_trailing_whitespace = false
+
+[*.{tf,tfvars,hcl}]
+indent_size = 2
+
+[*.cs]
+max_line_length = 120
+
+# --- Language style ----------------------------------------------------------
+csharp_style_namespace_declarations = file_scoped:warning
+csharp_prefer_braces = true:warning
+csharp_using_directive_placement = outside_namespace:warning
+dotnet_sort_system_directives_first = true
+dotnet_style_qualification_for_field = false:warning
+dotnet_style_qualification_for_property = false:warning
+dotnet_style_qualification_for_method = false:warning
+csharp_style_var_for_built_in_types = true:suggestion
+csharp_style_var_when_type_is_apparent = true:suggestion
+csharp_style_var_elsewhere = true:suggestion
+dotnet_style_prefer_collection_expression = true:warning
+csharp_style_prefer_primary_constructors = true:suggestion
+
+# Unused code
+dotnet_diagnostic.IDE0005.severity = warning
+dotnet_diagnostic.IDE0051.severity = warning
+dotnet_diagnostic.IDE0052.severity = warning
+dotnet_diagnostic.IDE0060.severity = warning
+
+# --- Analyzer tuning ---------------------------------------------------------
+# ASP.NET Core has no synchronization context, so ConfigureAwait(false) is noise.
+dotnet_diagnostic.MA0004.severity = none
+# Method names in the Application layer follow the domain language of use cases.
+dotnet_diagnostic.CA1062.severity = none
+
+# --- Tests -------------------------------------------------------------------
+[tests/**.cs]
+# Test names follow Should_<behavior>_when_<condition> (ai/TESTS.md §3.3).
+dotnet_diagnostic.CA1707.severity = none
+dotnet_diagnostic.S1144.severity = none
+dotnet_diagnostic.S2699.severity = none
+dotnet_diagnostic.S3928.severity = none
+# Several cohesive test classes per file, grouped by behavior (ai/TESTS.md §3.3).
+dotnet_diagnostic.MA0048.severity = none
+# Shared builders are intentionally static helpers.
+dotnet_diagnostic.CA1515.severity = none
