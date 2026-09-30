@@ -1,0 +1,77 @@
+name: CI
+
+on:
+    pull_request:
+    push:
+        branches: [main]
+
+# Least-privilege token (ai/SECURITY.md §9). Actions are pinned to full commit SHAs.
+permissions:
+    contents: read
+
+concurrency:
+    group: ci-${{ github.ref }}
+    cancel-in-progress: true
+
+env:
+    DOTNET_NOLOGO: true
+    DOTNET_CLI_TELEMETRY_OPTOUT: true
+    CI: true
+
+jobs:
+    quality:
+        name: Build, format, test
+        runs-on: ubuntu-latest
+        timeout-minutes: 15
+        steps:
+            - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+              with:
+                  persist-credentials: false
+
+            - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+              with:
+                  global-json-file: global.json
+
+            - name: Restore (locked)
+              run: |
+                  dotnet restore Portfolio.csproj --locked-mode
+                  dotnet restore tests/Portfolio.UnitTests --locked-mode
+                  dotnet restore tests/Portfolio.ArchitectureTests --locked-mode
+                  dotnet restore tests/Portfolio.IntegrationTests --locked-mode
+
+            - name: Formatting (CSharpier)
+              run: |
+                  dotnet tool install --global csharpier --version 1.3.0
+                  csharpier check .
+
+            - name: Build (warnings are errors)
+              run: |
+                  dotnet build Portfolio.csproj -c Release --no-restore -warnaserror
+                  dotnet build tests/Portfolio.UnitTests -c Release --no-restore -warnaserror
+                  dotnet build tests/Portfolio.ArchitectureTests -c Release --no-restore -warnaserror
+                  dotnet build tests/Portfolio.IntegrationTests -c Release --no-restore -warnaserror
+
+            - name: Unit tests
+              run: dotnet test --project tests/Portfolio.UnitTests -c Release --no-build --coverage --coverage-output-format cobertura --results-directory TestResults
+
+            - name: Architecture tests
+              run: dotnet test --project tests/Portfolio.ArchitectureTests -c Release --no-build
+
+            - name: Integration tests
+              run: dotnet test --project tests/Portfolio.IntegrationTests -c Release --no-build
+
+            - name: Vulnerable packages
+              run: |
+                  dotnet list Portfolio.csproj package --vulnerable --include-transitive 2>&1 | tee vulnerabilities.txt
+                  if grep -q "has the following vulnerable packages" vulnerabilities.txt; then
+                    echo "Vulnerable packages found." >&2
+                    exit 1
+                  fi
+
+            - name: Upload coverage
+              if: always()
+              uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+              with:
+                  name: coverage
+                  path: TestResults/
+                  if-no-files-found: ignore
