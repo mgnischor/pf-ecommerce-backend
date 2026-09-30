@@ -1,0 +1,10 @@
+# Copy to backend.<environment>.hcl (git-ignored if it contains account-specific values) and run:
+#   terraform init -backend-config=backend.production.hcl
+# One state object per environment; the bucket is created once, out of band, with versioning,
+# SSE-KMS (customer-managed key), public access blocked, and access limited to the CI identity.
+bucket       = "pf-ecommerce-tfstate-<account-id>"
+key          = "platform/production/terraform.tfstate"
+region       = "us-east-1"
+encrypt      = true
+kms_key_id   = "alias/pf-ecommerce-tfstate"
+use_lockfile = true # native S3 locking; no DynamoDB table
