@@ -1,6 +1,9 @@
 using System.Diagnostics.CodeAnalysis;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Server.Kestrel.Core;
 using Microsoft.Extensions.Configuration.Json;
+using Portfolio.Identity;
 using Scalar.AspNetCore;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -22,7 +25,15 @@ builder.WebHost.ConfigureKestrel(options =>
 // The only place allowed to touch the system clock: everything else receives TimeProvider by injection.
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddProblemDetails();
-builder.Services.AddControllers();
+builder.Services.AddIdentityModule();
+builder
+    .Services.AddControllers()
+    .AddJsonOptions(options =>
+    {
+        // One naming policy for the whole API: camelCase properties and camelCase string enums (ai/API_CONTRACTS.md §3).
+        options.JsonSerializerOptions.PropertyNamingPolicy = JsonNamingPolicy.CamelCase;
+        options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter(JsonNamingPolicy.CamelCase));
+    });
 builder.Services.AddOpenApi();
 
 var app = builder.Build();
@@ -42,21 +53,27 @@ app.UseWhen(
 
 if (app.Environment.IsDevelopment())
 {
-    app.MapOpenApi("/api/v1/openapi/v1.json");
+    app.MapOpenApi("/api/v1/openapi/v1.json").AllowAnonymous();
     app.MapScalarApiReference(
-        "/api/v1/docs",
-        options =>
-        {
-            options.WithOpenApiRoutePattern("/api/v1/openapi/v1.json");
-            options.WithTheme(ScalarTheme.DeepSpace);
-            options.WithTitle("E-Commerce API");
-            options.WithYamlDocumentDownload();
-        }
-    );
+            "/api/v1/docs",
+            options =>
+            {
+                options.WithOpenApiRoutePattern("/api/v1/openapi/v1.json");
+                options.WithTheme(ScalarTheme.DeepSpace);
+                options.WithTitle("E-Commerce API");
+                options.WithYamlDocumentDownload();
+            }
+        )
+        .AllowAnonymous();
 }
 
+app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
+
+// Unmatched routes answer 404 (rendered as Problem Details by the status code pages) instead of being
+// challenged by the default-deny fallback policy, which would hide the difference between "unknown" and "protected".
+app.MapFallback("{*path}", () => Results.NotFound()).AllowAnonymous();
 await app.RunAsync();
 
 // Files live in configuration/ (copied next to the binaries), which the default host does not probe.
