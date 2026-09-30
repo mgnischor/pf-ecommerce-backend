@@ -1,0 +1,171 @@
+#--------------------------------------------------------------------------------------------------
+# Integrated Development Environment (IDEs) and code editors
+#--------------------------------------------------------------------------------------------------
+
+# Apple Xcode
+xcuserdata/
+
+# JetBrains
+.idea_modules/
+.idea/.cache/.Apifox_Helper
+.idea/*.iml
+.idea/**/aws.xml
+.idea/**/contentModel.xml
+.idea/**/dataSources.ids
+.idea/**/dataSources.local.xml
+.idea/**/dataSources/
+.idea/**/dbnavigator.xml
+.idea/**/dictionaries
+.idea/**/dynamic.xml
+.idea/**/gradle.xml
+.idea/**/libraries
+.idea/**/mongoSettings.xml
+.idea/**/shelf
+.idea/**/sqlDataSources.xml
+.idea/**/tasks.xml
+.idea/**/uiDesigner.xml
+.idea/**/usage.statistics.xml
+.idea/**/workspace.xml
+.idea/ApifoxUploaderProjectSetting.xml
+.idea/artifacts
+.idea/caches/build_file_checksums.ser
+.idea/compiler.xml
+.idea/httpRequests
+.idea/jarRepositories.xml
+.idea/modules
+.idea/modules.xml
+.idea/replstate.xml
+.idea/sonarlint.xml
+.idea/sonarlint/
+*.iml
+*.ipr
+*.iws
+atlassian-ide-plugin.xml
+cmake-build-*/
+com_crashlytics_export_strings.xml
+crashlytics-build.properties
+crashlytics.properties
+fabric.properties
+http-client.private.env.json
+out/
+
+# Microsoft Visual Studio Code
+.history/
+.vscode/
+*.vsix
+
+# Sublime Text
+*.stTheme.cache
+*.sublime-project
+*.sublime-workspace
+*.tmlanguage.cache
+*.tmPreferences.cache
+bh_unicode_properties.cache
+GitHub.sublime-settings
+oscrypto-ca-bundle.crt
+Package Control.ca-bundle
+Package Control.ca-certs/
+Package Control.ca-list
+Package Control.cache/
+Package Control.last-run
+Package Control.merged-ca-bundle
+Package Control.system-ca-bundle
+Package Control.user-ca-bundle
+sftp-config-alt*.json
+sftp-config.json
+
+#--------------------------------------------------------------------------------------------------
+# Operating System
+#--------------------------------------------------------------------------------------------------
+
+# Apple macOS
+__MACOSX/
+._*
+.apdisk
+.AppleDB
+.AppleDesktop
+.AppleDouble
+.com.apple.timemachine.donotpresent
+.DocumentRevisions-V100
+.DS_Store
+.fseventsd
+.LSOverride
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+Network Trash Folder
+Temporary Items
+
+# Linux
+.directory
+.fuse_hidden*
+.nfs*
+.Trash-*
+*~
+nohup.out
+
+# Microsoft Windows
+[Dd]esktop.ini
+*.stackdump
+$RECYCLE.BIN/
+ehthumbs_vista.db
+ehthumbs.db
+Thumbs.db
+Thumbs.db:encryptable
+
+#--------------------------------------------------------------------------------------------------
+# Build and dependency management tools
+#--------------------------------------------------------------------------------------------------
+
+# Microsoft .NET
+[Aa][Rr][Mm]/
+[Aa][Rr][Mm]64/
+[Bb]in/
+[Bb]uild[Ll]og.*
+[Dd]ebug/
+[Dd]ebugPublic/
+[Ll]og/
+[Ll]ogs/
+[Oo]bj/
+[Rr]elease/
+[Rr]eleases/
+[Tt]est[Rr]esult*/
+[Ww][Ii][Nn]32/
+*.binlog
+*.nupkg
+*.snupkg
+*.VisualState.xml
+*~
+~$*
+artifacts/
+bld/
+CodeCoverage/
+nunit-*.xml
+project.fragment.lock.json
+project.lock.json
+ScaffoldingReadMe.txt
+TestResult.xml
+x64/
+x86/
+
+#----------------------------------------------------------------------------------
+# Internal files
+#----------------------------------------------------------------------------------
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+tfplan
+crash.log
+crash.*.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+*.auto.tfvars
+*.auto.tfvars.json
+backend.*.hcl
+!backend.hcl.example
