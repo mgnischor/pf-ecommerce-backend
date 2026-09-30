@@ -1,0 +1,13 @@
+# Banned APIs (Microsoft.CodeAnalysis.BannedApiAnalyzers, ai/CODE.md §5).
+# Format: <DocId>;<message shown in the diagnostic>
+
+P:System.DateTime.Now;Inject TimeProvider instead of reading the clock (ai/BUSINESS.md §9.1).
+P:System.DateTime.UtcNow;Inject TimeProvider instead of reading the clock (ai/BUSINESS.md §9.1).
+P:System.DateTime.Today;Inject TimeProvider instead of reading the clock (ai/BUSINESS.md §9.1).
+P:System.DateTimeOffset.Now;Inject TimeProvider instead of reading the clock (ai/BUSINESS.md §9.1).
+P:System.DateTimeOffset.UtcNow;Inject TimeProvider instead of reading the clock (ai/BUSINESS.md §9.1).
+M:System.Threading.Thread.Sleep(System.Int32);Never block a thread; await a delay or use a bounded polling helper.
+M:System.Threading.Thread.Sleep(System.TimeSpan);Never block a thread; await a delay or use a bounded polling helper.
+M:System.Random.#ctor;Use RandomNumberGenerator for anything security-relevant (ai/SECURITY.md §4).
+M:System.Random.#ctor(System.Int32);Use RandomNumberGenerator for anything security-relevant (ai/SECURITY.md §4).
+P:System.Random.Shared;Use RandomNumberGenerator for anything security-relevant (ai/SECURITY.md §4).
