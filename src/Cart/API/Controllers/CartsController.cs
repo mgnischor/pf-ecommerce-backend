@@ -2,15 +2,16 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Portfolio.Cart.API.Contracts;
 using Portfolio.SharedKernel.API;
+using Portfolio.SharedKernel.API.Authorization;
 
 namespace Portfolio.Cart.API.Controllers;
 
 /// <summary>The shopper's pre-purchase item selection. Every cart belongs to the authenticated customer.</summary>
 [Route("api/v1/carts")]
-[Authorize(Roles = ApiRoles.Customer)]
+[Authorize(Policy = AccessPolicies.Authenticated)]
 [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized, "application/problem+json")]
 [ProducesResponseType<ProblemDetails>(StatusCodes.Status403Forbidden, "application/problem+json")]
-public sealed class CartsController : ApiControllerBase
+internal sealed class CartsController : ApiControllerBase
 {
     /// <summary>Opens a cart for the authenticated customer.</summary>
     /// <param name="request">Cart settings.</param>
