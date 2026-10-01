@@ -53,16 +53,16 @@ processors:
 
 exporters:
     # Prometheus with its OTLP receiver enabled.
-    otlphttp/metrics:
+    otlp_http/metrics:
         endpoint: http://prometheus:9090/api/v1/otlp
         tls:
             insecure: true
     # Loki's native OTLP ingest.
-    otlphttp/loki:
+    otlp_http/loki:
         endpoint: http://loki:3100/otlp
         tls:
             insecure: true
-    otlp/tempo:
+    otlp_grpc/tempo:
         endpoint: tempo:4317
         tls:
             insecure: true
@@ -82,12 +82,12 @@ service:
         traces:
             receivers: [otlp]
             processors: [memory_limiter, redaction, tail_sampling, batch]
-            exporters: [otlp/tempo]
+            exporters: [otlp_grpc/tempo]
         metrics:
             receivers: [otlp]
             processors: [memory_limiter, redaction, batch]
-            exporters: [otlphttp/metrics]
+            exporters: [otlp_http/metrics]
         logs:
             receivers: [otlp]
             processors: [memory_limiter, redaction, batch]
-            exporters: [otlphttp/loki]
+            exporters: [otlp_http/loki]
