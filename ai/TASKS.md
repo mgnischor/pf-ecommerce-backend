@@ -76,11 +76,8 @@ This file is the **single source of truth for task progress** during active deve
 
 ### Containers
 
-- [ ] Write the production `Dockerfile` (multi-stage, chiseled base, digest-pinned, non-root)
-- [ ] Write `docker-compose-dev.yml` with PostgreSQL, Valkey, RabbitMQ, and the observability backend
-- [ ] Write `docker-compose-prod.yml` with hardened services, internal networks, and secrets
 - [ ] Write the Kubernetes base and overlays (Kustomize) with security contexts, resources, PDBs, and network policies
-- [ ] Implement liveness, readiness, and startup endpoints; handle `SIGTERM` gracefully (consumers and outbox relay included)
+- [~] Implement liveness, readiness, and startup endpoints; handle `SIGTERM` gracefully (consumers and outbox relay included)
 
 ### Infrastructure as Code
 
@@ -115,3 +112,6 @@ This file is the **single source of truth for task progress** during active deve
 - [x] Add `global.json`, `Directory.Build.props`, `Directory.Packages.props`, and `.editorconfig` (analyzers, nullable, warnings as errors, central package management, lock files)
 - [x] Resolve all analyzer and formatting (CSharpier/Prettier) warnings
 - [x] Implement password hashing (Argon2id), JWT validation, and refresh-token rotation per `ai/SECURITY.md`
+- [x] Write the production `Dockerfile` (multi-stage, chiseled base, digest-pinned, non-root)
+- [x] Write `docker-compose-dev.yml` with PostgreSQL, Valkey, RabbitMQ, and the observability backend
+- [x] Write `docker-compose-prod.yml` with hardened services, internal networks, and secrets
