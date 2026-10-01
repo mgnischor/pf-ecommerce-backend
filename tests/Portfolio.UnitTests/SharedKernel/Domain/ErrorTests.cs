@@ -33,6 +33,17 @@ public sealed class ErrorFactoryTests
         error.Type.ShouldBe(ErrorType.Conflict);
         error.RuleId.ShouldBe("BR-ORD-002");
     }
+
+    [Fact]
+    public void Should_create_a_precondition_failed_error_without_field_or_rule()
+    {
+        var error = Error.PreconditionFailed("ORDER_VERSION_MISMATCH");
+
+        error.Type.ShouldBe(ErrorType.PreconditionFailed);
+        error.Code.ShouldBe("ORDER_VERSION_MISMATCH");
+        error.Field.ShouldBeNull();
+        error.RuleId.ShouldBeNull();
+    }
 }
 
 public sealed class ErrorEqualityTests
