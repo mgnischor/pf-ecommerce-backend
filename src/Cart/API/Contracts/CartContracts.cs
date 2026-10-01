@@ -5,7 +5,7 @@ using Portfolio.SharedKernel.API.Contracts;
 namespace Portfolio.Cart.API.Contracts;
 
 /// <summary>Status of a cart. An open set: clients must tolerate new values.</summary>
-public enum CartStatusContract
+internal enum CartStatusContract
 {
     /// <summary>Open for changes.</summary>
     Active,
@@ -19,7 +19,7 @@ public enum CartStatusContract
 
 /// <summary>Request to open a cart.</summary>
 /// <param name="Currency">ISO 4217 currency the cart is priced in.</param>
-public sealed record CreateCartRequest(
+internal sealed record CreateCartRequest(
     [
         Required,
         RegularExpression(
@@ -33,7 +33,7 @@ public sealed record CreateCartRequest(
 /// <summary>Request to add a product to a cart. Prices are always taken from the catalog, never from the client.</summary>
 /// <param name="ProductId">Product to add.</param>
 /// <param name="Quantity">Units to add, 1–99.</param>
-public sealed record AddCartItemRequest(
+internal sealed record AddCartItemRequest(
     [Required] [property: JsonRequired] Guid ProductId,
     [Range(1, 99)] [property: JsonRequired] int Quantity
 );
@@ -46,7 +46,7 @@ public sealed record AddCartItemRequest(
 /// <param name="Quantity">Units in the line.</param>
 /// <param name="UnitPrice">Current unit price.</param>
 /// <param name="LineTotal">Unit price multiplied by quantity, computed by the server.</param>
-public sealed record CartItemResponse(
+internal sealed record CartItemResponse(
     Guid Id,
     Guid ProductId,
     string Sku,
@@ -63,7 +63,7 @@ public sealed record CartItemResponse(
 /// <param name="Subtotal">Sum of the line totals, computed by the server.</param>
 /// <param name="Version">Resource version; also returned as the <c>ETag</c> header.</param>
 /// <param name="AllowedActions">Actions currently allowed, such as <c>checkout</c>.</param>
-public sealed record CartResponse(
+internal sealed record CartResponse(
     Guid Id,
     CartStatusContract Status,
     IReadOnlyList<CartItemResponse> Items,
