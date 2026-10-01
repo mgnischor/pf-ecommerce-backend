@@ -4,7 +4,7 @@ using Portfolio.SharedKernel.API.Contracts;
 namespace Portfolio.Billing.API.Contracts;
 
 /// <summary>Status of a payment. An open set: clients must tolerate new values.</summary>
-public enum PaymentStatusContract
+internal enum PaymentStatusContract
 {
     /// <summary>Waiting for the provider.</summary>
     Pending,
@@ -23,7 +23,7 @@ public enum PaymentStatusContract
 }
 
 /// <summary>Status of a refund. An open set: clients must tolerate new values.</summary>
-public enum RefundStatusContract
+internal enum RefundStatusContract
 {
     /// <summary>Waiting for approval or settlement.</summary>
     Pending,
@@ -38,7 +38,7 @@ public enum RefundStatusContract
 /// <summary>Request to refund part or all of a captured payment.</summary>
 /// <param name="Amount">Amount to refund; cannot exceed the refundable balance.</param>
 /// <param name="ReasonCode">Machine-readable reason, such as <c>damagedItem</c>.</param>
-public sealed record RefundPaymentRequest(
+internal sealed record RefundPaymentRequest(
     [Required] MoneyRequest Amount,
     [Required, StringLength(32, MinimumLength = 2)] string ReasonCode
 );
@@ -51,7 +51,7 @@ public sealed record RefundPaymentRequest(
 /// <param name="MethodBrand">Card brand, omitted for other methods.</param>
 /// <param name="MethodLastFour">Last four digits of the card, omitted for other methods.</param>
 /// <param name="Version">Resource version; also returned as the <c>ETag</c> header.</param>
-public sealed record PaymentResponse(
+internal sealed record PaymentResponse(
     Guid Id,
     Guid OrderId,
     PaymentStatusContract Status,
@@ -66,4 +66,4 @@ public sealed record PaymentResponse(
 /// <param name="PaymentId">Refunded payment.</param>
 /// <param name="Status">Refund status.</param>
 /// <param name="Amount">Refunded amount.</param>
-public sealed record RefundResponse(Guid Id, Guid PaymentId, RefundStatusContract Status, MoneyResponse Amount);
+internal sealed record RefundResponse(Guid Id, Guid PaymentId, RefundStatusContract Status, MoneyResponse Amount);
