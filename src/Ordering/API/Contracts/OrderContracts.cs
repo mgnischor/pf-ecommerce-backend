@@ -4,7 +4,7 @@ using Portfolio.SharedKernel.API.Contracts;
 namespace Portfolio.Ordering.API.Contracts;
 
 /// <summary>Status of an order. An open set: clients must tolerate new values.</summary>
-public enum OrderStatusContract
+internal enum OrderStatusContract
 {
     /// <summary>Placed and waiting for payment.</summary>
     AwaitingPayment,
@@ -25,7 +25,7 @@ public enum OrderStatusContract
 /// <summary>Request to cancel an order.</summary>
 /// <param name="ReasonCode">Machine-readable reason, such as <c>changedMind</c>.</param>
 /// <param name="Note">Optional free text, up to 500 characters, stored as plain text.</param>
-public sealed record CancelOrderRequest(
+internal sealed record CancelOrderRequest(
     [Required, StringLength(32, MinimumLength = 2)] string ReasonCode,
     [StringLength(500)] string? Note = null
 );
@@ -36,7 +36,7 @@ public sealed record CancelOrderRequest(
 /// <param name="Status">Order status.</param>
 /// <param name="Total">Order total captured at purchase time.</param>
 /// <param name="PlacedAt">UTC instant the order was placed.</param>
-public sealed record OrderSummaryResponse(
+internal sealed record OrderSummaryResponse(
     Guid Id,
     string Number,
     OrderStatusContract Status,
@@ -51,7 +51,7 @@ public sealed record OrderSummaryResponse(
 /// <param name="Quantity">Units purchased.</param>
 /// <param name="UnitPrice">Unit price at purchase time.</param>
 /// <param name="LineTotal">Unit price multiplied by quantity.</param>
-public sealed record OrderItemResponse(
+internal sealed record OrderItemResponse(
     Guid ProductId,
     string Sku,
     string Name,
@@ -69,7 +69,7 @@ public sealed record OrderItemResponse(
 /// <param name="PlacedAt">UTC instant the order was placed.</param>
 /// <param name="Version">Resource version; also returned as the <c>ETag</c> header.</param>
 /// <param name="AllowedActions">Actions the state machine currently allows, such as <c>cancel</c>.</param>
-public sealed record OrderResponse(
+internal sealed record OrderResponse(
     Guid Id,
     string Number,
     OrderStatusContract Status,
