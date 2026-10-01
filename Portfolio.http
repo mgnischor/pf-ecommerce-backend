@@ -302,6 +302,16 @@ Content-Type: application/json
 ### Inventory
 ### ========================================================================
 
+### 31a. Start tracking a SKU (manager level; the item starts with no stock; answers 201 with an ETag)
+POST {{ApiBase}}/inventory/items
+Authorization: Bearer {{Token}}
+Content-Type: application/json
+Accept: application/json
+
+{
+    "sku": "{{Sku}}"
+}
+
 ### 31. Get the stock level of a SKU (collaborator level)
 GET {{ApiBase}}/inventory/items/{{Sku}}
 Authorization: Bearer {{Token}}
