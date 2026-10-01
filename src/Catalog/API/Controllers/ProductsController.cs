@@ -3,13 +3,14 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Portfolio.Catalog.API.Contracts;
 using Portfolio.SharedKernel.API;
+using Portfolio.SharedKernel.API.Authorization;
 using Portfolio.SharedKernel.API.Contracts;
 
 namespace Portfolio.Catalog.API.Controllers;
 
 /// <summary>Product catalog: discovery for everyone, maintenance for catalog staff.</summary>
 [Route("api/v1/products")]
-public sealed class ProductsController : ApiControllerBase
+internal sealed class ProductsController : ApiControllerBase
 {
     /// <summary>Lists products, newest first unless <paramref name="sort"/> says otherwise.</summary>
     /// <param name="limit">Page size, 1–100 (default 20).</param>
@@ -48,7 +49,7 @@ public sealed class ProductsController : ApiControllerBase
     /// <param name="idempotencyKey">Replaying the same key returns the original result.</param>
     /// <param name="request">Product data.</param>
     [HttpPost]
-    [Authorize(Roles = ApiRoles.CatalogStaff)]
+    [Authorize(Policy = AccessPolicies.Collaborator)]
     [ProducesResponseType<ProductResponse>(StatusCodes.Status201Created)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized, "application/problem+json")]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status403Forbidden, "application/problem+json")]
@@ -69,7 +70,7 @@ public sealed class ProductsController : ApiControllerBase
     /// <param name="ifMatch">ETag of the version the client read.</param>
     /// <param name="request">Fields to change.</param>
     [HttpPatch("{productId:guid}")]
-    [Authorize(Roles = ApiRoles.CatalogStaff)]
+    [Authorize(Policy = AccessPolicies.Collaborator)]
     [Consumes("application/merge-patch+json", "application/json")]
     [ProducesResponseType<ProductResponse>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized, "application/problem+json")]
@@ -88,7 +89,7 @@ public sealed class ProductsController : ApiControllerBase
     /// <param name="ifMatch">ETag of the version the client read.</param>
     /// <param name="request">New price.</param>
     [HttpPut("{productId:guid}/price")]
-    [Authorize(Roles = ApiRoles.CatalogStaff)]
+    [Authorize(Policy = AccessPolicies.Manager)]
     [ProducesResponseType<ProductResponse>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized, "application/problem+json")]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status403Forbidden, "application/problem+json")]
@@ -105,7 +106,7 @@ public sealed class ProductsController : ApiControllerBase
     /// <param name="productId">Product identifier.</param>
     /// <param name="ifMatch">ETag of the version the client read.</param>
     [HttpPost("{productId:guid}/activation")]
-    [Authorize(Roles = ApiRoles.CatalogStaff)]
+    [Authorize(Policy = AccessPolicies.Manager)]
     [ProducesResponseType<ProductResponse>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized, "application/problem+json")]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status403Forbidden, "application/problem+json")]
@@ -119,7 +120,7 @@ public sealed class ProductsController : ApiControllerBase
     /// <param name="productId">Product identifier.</param>
     /// <param name="ifMatch">ETag of the version the client read.</param>
     [HttpPost("{productId:guid}/discontinuation")]
-    [Authorize(Roles = ApiRoles.CatalogStaff)]
+    [Authorize(Policy = AccessPolicies.Manager)]
     [ProducesResponseType<ProductResponse>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized, "application/problem+json")]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status403Forbidden, "application/problem+json")]
@@ -136,7 +137,7 @@ public sealed class ProductsController : ApiControllerBase
     /// <param name="idempotencyKey">Replaying the same key returns the original result.</param>
     /// <param name="ifMatch">ETag of the version the client read.</param>
     [HttpDelete("{productId:guid}")]
-    [Authorize(Roles = ApiRoles.CatalogStaff)]
+    [Authorize(Policy = AccessPolicies.Administrator)]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized, "application/problem+json")]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status403Forbidden, "application/problem+json")]
