@@ -40,7 +40,6 @@ services:
         cap_drop: [ALL]
         security_opt:
             - no-new-privileges:true
-        pids_limit: 256
         healthcheck:
             # App-provided probe mode: the chiseled runtime image ships no shell, curl, or wget.
             test: ["CMD", "dotnet", "Portfolio.dll", "--health-check"]
@@ -51,6 +50,7 @@ services:
         deploy:
             resources:
                 limits:
+                    pids: 256
                     cpus: "1.0"
                     memory: 512M
         stop_grace_period: 35s
@@ -79,7 +79,7 @@ services:
             POSTGRES_USER: app
             POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}"
         ports:
-            - "127.0.0.1:5432:5432"
+            - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
         volumes:
             - pgdata:/var/lib/postgresql
         read_only: true
@@ -89,7 +89,6 @@ services:
         cap_drop: [ALL]
         security_opt:
             - no-new-privileges:true
-        pids_limit: 256
         healthcheck:
             test: ["CMD-SHELL", "pg_isready -U app -d ecommerce"]
             interval: 10s
@@ -99,6 +98,7 @@ services:
         deploy:
             resources:
                 limits:
+                    pids: 256
                     cpus: "1.0"
                     memory: 512M
         stop_grace_period: 30s
@@ -125,7 +125,7 @@ services:
         environment:
             REDISCLI_AUTH: "${VALKEY_PASSWORD}"
         ports:
-            - "127.0.0.1:6379:6379"
+            - "127.0.0.1:${VALKEY_PORT:-6379}:6379"
         volumes:
             - valkeydata:/data
         read_only: true
@@ -134,7 +134,6 @@ services:
         cap_drop: [ALL]
         security_opt:
             - no-new-privileges:true
-        pids_limit: 128
         healthcheck:
             test: ["CMD-SHELL", "valkey-cli ping | grep -q PONG"]
             interval: 10s
@@ -143,6 +142,7 @@ services:
         deploy:
             resources:
                 limits:
+                    pids: 128
                     cpus: "0.5"
                     memory: 160M
         networks:
@@ -154,11 +154,13 @@ services:
         user: "100:101"
         hostname: rabbitmq
         environment:
+            # Logs go to stdout only (ai/CONTAINERS.md §3.5); the filesystem is read-only.
+            RABBITMQ_LOGS: "-"
             RABBITMQ_DEFAULT_USER: app
             RABBITMQ_DEFAULT_PASS: "${RABBITMQ_PASSWORD:?set RABBITMQ_PASSWORD in .env}"
         ports:
-            - "127.0.0.1:5672:5672"
-            - "127.0.0.1:15672:15672" # management UI, development only
+            - "127.0.0.1:${RABBITMQ_PORT:-5672}:5672"
+            - "127.0.0.1:${RABBITMQ_MANAGEMENT_PORT:-15672}:15672" # management UI, development only
         volumes:
             - rabbitmqdata:/var/lib/rabbitmq
         read_only: true
@@ -168,7 +170,6 @@ services:
         cap_drop: [ALL]
         security_opt:
             - no-new-privileges:true
-        pids_limit: 512
         healthcheck:
             test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
             interval: 15s
@@ -178,6 +179,7 @@ services:
         deploy:
             resources:
                 limits:
+                    pids: 512
                     cpus: "1.0"
                     memory: 512M
         stop_grace_period: 30s
@@ -190,17 +192,16 @@ services:
     otel-lgtm:
         image: grafana/otel-lgtm:0.34.0@sha256:b966ea107831d526d9eb8fe4d2d86c9e5731392fad9dce8296bcf2072031f07c
         ports:
-            - "127.0.0.1:3000:3000" # Grafana
-            - "127.0.0.1:4317:4317" # OTLP gRPC
-            - "127.0.0.1:4318:4318" # OTLP HTTP
+            - "127.0.0.1:${GRAFANA_PORT:-3000}:3000" # Grafana
+            - "127.0.0.1:${OTLP_GRPC_PORT:-4317}:4317" # OTLP gRPC
+            - "127.0.0.1:${OTLP_HTTP_PORT:-4318}:4318" # OTLP HTTP
         volumes:
             - lgtmdata:/data
         cap_drop: [ALL]
         security_opt:
             - no-new-privileges:true
-        pids_limit: 1024
         healthcheck:
-            test: ["CMD", "/otel-lgtm/otelcol-contrib/otelcol-contrib", "--version"]
+            test: ["CMD", "curl", "-sf", "http://localhost:3000/api/health"]
             interval: 15s
             timeout: 5s
             retries: 10
@@ -208,6 +209,7 @@ services:
         deploy:
             resources:
                 limits:
+                    pids: 1024
                     cpus: "2.0"
                     memory: 2G
         networks:
