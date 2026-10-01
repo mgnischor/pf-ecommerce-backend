@@ -8,7 +8,7 @@ namespace Portfolio.Customers.API.Contracts;
 /// <param name="Locale">Preferred locale such as <c>pt-BR</c>.</param>
 /// <param name="TimeZone">IANA time zone identifier.</param>
 /// <param name="Version">Resource version; also returned as the <c>ETag</c> header.</param>
-public sealed record CustomerProfileResponse(
+internal sealed record CustomerProfileResponse(
     Guid Id,
     string FullName,
     string MaskedEmail,
