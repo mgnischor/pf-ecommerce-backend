@@ -13,6 +13,9 @@
 # - TLS terminates at an external reverse proxy or load balancer that forwards to API_BIND_ADDRESS:API_PORT. It must
 #   never route /health/*, /metrics, or the observability backends to the internet (ai/SECURITY.md §6.3).
 # - Networks: `backend` and `observability` are internal (no route out of the host); only the API joins `edge`.
+# - The database is provisioned and migrated by one-shot jobs before the API starts (ai/DATABASE.md §6.1): roles and
+#   schemas (db-provision), one EF Core migrations bundle per bounded context run as app_migrator, then the grants
+#   (db-grant). The API connects as app_runtime, which can read and write rows but change no schema.
 name: pf-ecommerce
 
 x-hardening: &hardening
@@ -26,6 +29,49 @@ x-hardening: &hardening
         options:
             max-size: "10m"
             max-file: "5"
+
+# One-shot database jobs: same hardening, no restart, only the internal backend network.
+x-db-job: &db-job
+    read_only: true
+    cap_drop: [ALL]
+    security_opt:
+        - no-new-privileges:true
+    restart: "no"
+    networks:
+        - backend
+    logging:
+        driver: json-file
+        options:
+            max-size: "10m"
+            max-file: "3"
+
+# Provisioning of roles, schemas, and grants: psql from the pinned PostgreSQL image, secrets read from files.
+x-db-provision: &db-provision
+    <<: *db-job
+    image: postgres:18.6-alpine3.24@sha256:77f585114c32fbca283dc835b0596f4e52b51b4c6662d7810b2f4084f60a1873
+    user: "70:70"
+    entrypoint: ["sh", "/provision/provision.sh"]
+    volumes:
+        - ./database/provision.sh:/provision/provision.sh:ro
+        - ./database/provision-roles.sql:/provision/provision-roles.sql:ro
+    secrets:
+        - postgres_password
+        - postgres_migrator_password
+        - postgres_runtime_password
+        - postgres_readonly_password
+
+# One EF Core migrations bundle; the connection string is a secret file, never an argument or a variable.
+x-db-migrate: &db-migrate
+    <<: *db-job
+    image: ${MIGRATIONS_IMAGE:?set MIGRATIONS_IMAGE to registry/ecommerce-migrations:<version>@sha256:<digest>}
+    environment:
+        PF_DESIGN_TIME_CONNECTION_FILE: /run/secrets/conn_postgres_migrator
+        # A single-file bundle unpacks its native libraries; the root filesystem is read-only, /tmp is a tmpfs.
+        DOTNET_BUNDLE_EXTRACT_BASE_DIR: /tmp
+    secrets:
+        - conn_postgres_migrator
+    tmpfs:
+        - /tmp:size=64m,mode=1777
 
 services:
     ecommerce-api:
@@ -79,6 +125,8 @@ services:
         # Larger than HostOptions.ShutdownTimeout (25 s), so the host drains before Docker kills it.
         stop_grace_period: 35s
         depends_on:
+            db-grant:
+                condition: service_completed_successfully
             postgres:
                 condition: service_healthy
             valkey:
@@ -91,6 +139,41 @@ services:
             - edge
             - backend
             - observability
+
+    db-provision:
+        <<: *db-provision
+        depends_on:
+            postgres:
+                condition: service_healthy
+
+    db-migrate-identity:
+        <<: *db-migrate
+        entrypoint: ["/migrations/migrate-identity"]
+        depends_on:
+            db-provision:
+                condition: service_completed_successfully
+
+    db-migrate-catalog:
+        <<: *db-migrate
+        entrypoint: ["/migrations/migrate-catalog"]
+        depends_on:
+            db-migrate-identity:
+                condition: service_completed_successfully
+
+    db-migrate-inventory:
+        <<: *db-migrate
+        entrypoint: ["/migrations/migrate-inventory"]
+        depends_on:
+            db-migrate-catalog:
+                condition: service_completed_successfully
+
+    # Runs the provisioning again: the grants now cover the tables the migrations created, and the runtime role
+    # is denied the migration history.
+    db-grant:
+        <<: *db-provision
+        depends_on:
+            db-migrate-inventory:
+                condition: service_completed_successfully
 
     postgres:
         <<: *hardening
@@ -380,8 +463,16 @@ secrets:
         file: ./secrets/bootstrap_admin_email.txt
     bootstrap_admin_password:
         file: ./secrets/bootstrap_admin_password.txt
+    postgres_migrator_password:
+        file: ./secrets/postgres_migrator_password.txt
+    postgres_runtime_password:
+        file: ./secrets/postgres_runtime_password.txt
+    postgres_readonly_password:
+        file: ./secrets/postgres_readonly_password.txt
     conn_postgres:
         file: ./secrets/conn_postgres.txt
+    conn_postgres_migrator:
+        file: ./secrets/conn_postgres_migrator.txt
     conn_valkey:
         file: ./secrets/conn_valkey.txt
     conn_rabbitmq:
