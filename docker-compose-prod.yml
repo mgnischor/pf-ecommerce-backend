@@ -2,8 +2,9 @@
 # autoscaled deployments. Every rule of CONTAINERS.md §3 and §5 applies here without relaxation.
 #
 #   1. Create the secrets:   bash scripts/init-secrets.sh prod        (or: pwsh scripts/init-secrets.ps1 -Mode prod)
-#   2. Set the variables:    API_IMAGE, API_ALLOWED_HOSTS, JWT_ISSUER (see the ${VAR:?...} messages below)
-#   3. Deploy:               docker compose -f docker-compose-prod.yml up -d
+#   2. Set the variables:    cp .env.prod.example .env.prod   (API_IMAGE, API_ALLOWED_HOSTS, JWT_ISSUER)
+#   3. Deploy:               docker compose --env-file .env.prod -f docker-compose-prod.yml up -d
+#      (--env-file keeps the development .env out of the production stack)
 #
 # - The application image comes from the private registry, pinned to version AND digest; there is no `build:`.
 # - Backing-service images are pinned by digest; `latest` is forbidden. Versions match docker-compose-dev.yml.
@@ -62,7 +63,6 @@ services:
               target: ConnectionStrings__RabbitMQ
         tmpfs:
             - /tmp:size=64m,mode=1777
-        pids_limit: 256
         healthcheck:
             # App-provided probe mode: the chiseled runtime image ships no shell, curl, or wget.
             test: ["CMD", "dotnet", "Portfolio.dll", "--health-check"]
@@ -73,6 +73,7 @@ services:
         deploy:
             resources:
                 limits:
+                    pids: 256
                     cpus: "1.0"
                     memory: 512M
         # Larger than HostOptions.ShutdownTimeout (25 s), so the host drains before Docker kills it.
@@ -106,7 +107,6 @@ services:
         tmpfs:
             - /tmp:size=64m,mode=1777
             - /run/postgresql:size=8m,uid=70,gid=70
-        pids_limit: 256
         healthcheck:
             test: ["CMD-SHELL", "pg_isready -U app -d ecommerce"]
             interval: 10s
@@ -116,6 +116,7 @@ services:
         deploy:
             resources:
                 limits:
+                    pids: 256
                     cpus: "2.0"
                     memory: 1G
         stop_grace_period: 60s
@@ -139,15 +140,15 @@ services:
             - valkeydata:/data
         tmpfs:
             - /tmp:size=16m,mode=1777
-        pids_limit: 128
         healthcheck:
-            test: ["CMD-SHELL", "REDISCLI_AUTH=\"$$(cat /run/secrets/valkey_password)\" valkey-cli ping | grep -q PONG"]
+            test: ["CMD-SHELL", 'REDISCLI_AUTH="$$(cat /run/secrets/valkey_password)" valkey-cli ping | grep -q PONG']
             interval: 10s
             timeout: 5s
             retries: 5
         deploy:
             resources:
                 limits:
+                    pids: 128
                     cpus: "0.5"
                     memory: 256M
         networks:
@@ -159,17 +160,18 @@ services:
         user: "100:101"
         hostname: rabbitmq
         environment:
-            RABBITMQ_DEFAULT_USER_FILE: /run/secrets/rabbitmq_user
-            RABBITMQ_DEFAULT_PASS_FILE: /run/secrets/rabbitmq_password
+            # Logs go to stdout only (ai/CONTAINERS.md §3.5); the filesystem is read-only.
+            RABBITMQ_LOGS: "-"
+        # RabbitMQ 4.3 deprecates RABBITMQ_DEFAULT_*_FILE: the credentials are a configuration file delivered as a
+        # secret (default_user / default_pass), mounted next to the generated defaults.
         secrets:
-            - rabbitmq_user
-            - rabbitmq_password
+            - source: rabbitmq_credentials
+              target: /etc/rabbitmq/conf.d/20-credentials.conf
         volumes:
             - rabbitmqdata:/var/lib/rabbitmq
         tmpfs:
             - /tmp:size=32m,mode=1777
             - /etc/rabbitmq/conf.d:size=1m,uid=100,gid=101
-        pids_limit: 512
         healthcheck:
             test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
             interval: 15s
@@ -179,6 +181,7 @@ services:
         deploy:
             resources:
                 limits:
+                    pids: 512
                     cpus: "1.0"
                     memory: 512M
         stop_grace_period: 60s
@@ -192,19 +195,19 @@ services:
         user: "10001:10001"
         volumes:
             - ./observability/otel-collector/config.yaml:/etc/otelcol/config.yaml:ro
-        pids_limit: 128
-        # The distroless image has no shell or curl; the health_check extension is reachable only on the internal
-        # network, so liveness is the process itself (restart: unless-stopped recovers a crash).
+        # No healthcheck: the image is distroless with no probe command (docs/container-exceptions.md EX-001). The
+        # health_check extension exists on the internal network; restart: unless-stopped recovers a crash.
         deploy:
             resources:
                 limits:
+                    pids: 128
                     cpus: "0.5"
                     memory: 256M
         depends_on:
             prometheus:
                 condition: service_healthy
             loki:
-                condition: service_healthy
+                condition: service_started
             tempo:
                 condition: service_healthy
         networks:
@@ -225,7 +228,6 @@ services:
             - prometheusdata:/prometheus
         tmpfs:
             - /tmp:size=16m,mode=1777
-        pids_limit: 256
         healthcheck:
             test: ["CMD", "promtool", "check", "healthy", "--url=http://localhost:9090"]
             interval: 15s
@@ -235,6 +237,7 @@ services:
         deploy:
             resources:
                 limits:
+                    pids: 256
                     cpus: "1.0"
                     memory: 512M
         networks:
@@ -250,16 +253,11 @@ services:
             - lokidata:/loki
         tmpfs:
             - /tmp:size=32m,mode=1777
-        pids_limit: 256
-        healthcheck:
-            test: ["CMD", "/usr/bin/loki", "-version"]
-            interval: 15s
-            timeout: 5s
-            retries: 5
-            start_period: 20s
+        # No healthcheck: the image is distroless and Loki has no probe command (docs/container-exceptions.md EX-001).
         deploy:
             resources:
                 limits:
+                    pids: 256
                     cpus: "1.0"
                     memory: 512M
         networks:
@@ -275,9 +273,8 @@ services:
             - tempodata:/var/tempo
         tmpfs:
             - /tmp:size=32m,mode=1777
-        pids_limit: 256
         healthcheck:
-            test: ["CMD", "/tempo", "-version"]
+            test: ["CMD", "/tempo", "-health"]
             interval: 15s
             timeout: 5s
             retries: 5
@@ -285,6 +282,7 @@ services:
         deploy:
             resources:
                 limits:
+                    pids: 256
                     cpus: "1.0"
                     memory: 512M
         networks:
@@ -307,6 +305,9 @@ services:
             GF_ANALYTICS_REPORTING_ENABLED: "false"
             GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
             GF_ANALYTICS_CHECK_FOR_PLUGIN_UPDATES: "false"
+            # No plugin downloads at runtime: the image already bundles what the data sources need.
+            GF_PLUGINS_PREINSTALL_DISABLED: "true"
+            GF_PLUGINS_PLUGIN_ADMIN_ENABLED: "false"
             GF_SECURITY_COOKIE_SECURE: "true"
             GF_SECURITY_COOKIE_SAMESITE: strict
         secrets:
@@ -316,9 +317,8 @@ services:
             - grafanadata:/var/lib/grafana
         tmpfs:
             - /tmp:size=32m,mode=1777
-        pids_limit: 256
         healthcheck:
-            test: ["CMD", "grafana", "server", "--help"]
+            test: ["CMD", "wget", "-q", "--spider", "http://localhost:3000/api/health"]
             interval: 20s
             timeout: 10s
             retries: 5
@@ -326,13 +326,14 @@ services:
         deploy:
             resources:
                 limits:
+                    pids: 256
                     cpus: "0.5"
                     memory: 256M
         depends_on:
             prometheus:
                 condition: service_healthy
             loki:
-                condition: service_healthy
+                condition: service_started
             tempo:
                 condition: service_healthy
         networks:
@@ -367,10 +368,8 @@ secrets:
         file: ./secrets/postgres_password.txt
     valkey_password:
         file: ./secrets/valkey_password.txt
-    rabbitmq_user:
-        file: ./secrets/rabbitmq_user.txt
-    rabbitmq_password:
-        file: ./secrets/rabbitmq_password.txt
+    rabbitmq_credentials:
+        file: ./secrets/rabbitmq_credentials.conf
     grafana_admin_password:
         file: ./secrets/grafana_admin_password.txt
     jwt_es384_private_key:
