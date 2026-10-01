@@ -1,0 +1,42 @@
+# Grafana data sources, provisioned from Git (ai/OBSERVABILITY.md §11): nothing is configured by hand.
+apiVersion: 1
+
+datasources:
+    - name: Prometheus
+      uid: prometheus
+      type: prometheus
+      access: proxy
+      url: http://prometheus:9090
+      isDefault: true
+      editable: false
+
+    - name: Loki
+      uid: loki
+      type: loki
+      access: proxy
+      url: http://loki:3100
+      editable: false
+      jsonData:
+          # Log -> trace: every log record carries trace_id (ai/OBSERVABILITY.md §11).
+          derivedFields:
+              - name: trace_id
+                matcherType: label
+                matcherRegex: trace_id
+                url: "$${__value.raw}"
+                datasourceUid: tempo
+
+    - name: Tempo
+      uid: tempo
+      type: tempo
+      access: proxy
+      url: http://tempo:3200
+      editable: false
+      jsonData:
+          # Trace -> logs and trace -> metrics.
+          tracesToLogsV2:
+              datasourceUid: loki
+              filterByTraceID: true
+          tracesToMetrics:
+              datasourceUid: prometheus
+          nodeGraph:
+              enabled: true
