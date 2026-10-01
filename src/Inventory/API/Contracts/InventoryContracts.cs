@@ -1,7 +1,18 @@
 using System.ComponentModel.DataAnnotations;
 using System.Text.Json.Serialization;
+using Portfolio.SharedKernel.API.Contracts;
 
 namespace Portfolio.Inventory.API.Contracts;
+
+/// <summary>Request to start tracking the stock of a SKU. The item starts with no units on hand.</summary>
+/// <param name="Sku">Stock-keeping unit, 4–32 ASCII letters, digits, hyphen or underscore (case-insensitive).</param>
+internal sealed record OpenInventoryItemRequest(
+    [
+        Required,
+        RegularExpression(ContractPatterns.Sku, MatchTimeoutInMilliseconds = ContractPatterns.TimeoutMilliseconds)
+    ]
+        string Sku
+);
 
 /// <summary>Manual correction of the stock level, recorded as an append-only movement.</summary>
 /// <param name="Delta">Units to add (positive) or remove (negative); never zero.</param>
