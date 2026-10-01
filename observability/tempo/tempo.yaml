@@ -12,13 +12,6 @@ distributor:
                 grpc:
                     endpoint: 0.0.0.0:4317
 
-ingester:
-    max_block_duration: 5m
-
-compactor:
-    compaction:
-        block_retention: 336h # 14 days
-
 storage:
     trace:
         backend: local
