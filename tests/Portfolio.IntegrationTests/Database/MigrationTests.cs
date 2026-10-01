@@ -1,0 +1,171 @@
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
+using Portfolio.SharedKernel.Infrastructure;
+
+namespace Portfolio.IntegrationTests.Database;
+
+/// <summary>
+/// The migrations, applied to a real PostgreSQL (ai/DATABASE.md §8.2): each context owns exactly its schema, its own
+/// history, and its own outbox and inbox; the model snapshot matches the model; and every migration can be undone.
+/// </summary>
+public sealed class MigrationTests : DatabaseTestBase
+{
+    private static readonly string[] Technical = ["__ef_migrations_history", "inbox_messages", "outbox_messages"];
+
+    [Theory]
+    [InlineData("identity", "refresh_tokens,users")]
+    [InlineData("catalog", "products")]
+    [InlineData("inventory", "inventory_items,stock_movements")]
+    public async Task Should_create_in_each_schema_its_own_tables_and_its_own_outbox_inbox_and_history(
+        string schema,
+        string domainTables
+    )
+    {
+        var tables = await Database.StringsAsync(
+            $"SELECT table_name FROM information_schema.tables WHERE table_schema = '{schema}' ORDER BY table_name"
+        );
+
+        tables.ShouldBe([.. Technical.Concat(domainTables.Split(',')).Order(StringComparer.Ordinal)]);
+    }
+
+    [Fact]
+    public async Task Should_create_nothing_outside_the_three_context_schemas()
+    {
+        var schemas = await Database.StringsAsync(
+            """
+            SELECT DISTINCT table_schema FROM information_schema.tables
+            WHERE table_schema NOT IN ('pg_catalog', 'information_schema') ORDER BY table_schema
+            """
+        );
+
+        schemas.ShouldBe(["catalog", "identity", "inventory"]);
+    }
+
+    [Fact]
+    public async Task Should_keep_one_applied_migration_in_each_contexts_own_history_table()
+    {
+        foreach (var schema in new[] { "identity", "catalog", "inventory" })
+        {
+            var applied = await Database.StringsAsync($"SELECT migration_id FROM {schema}.__ef_migrations_history");
+
+            applied
+                .ShouldHaveSingleItem()
+                .ShouldEndWith($"_Create{char.ToUpperInvariant(schema[0])}{schema[1..]}Schema");
+        }
+    }
+
+    [Fact]
+    public async Task Should_not_have_a_foreign_key_that_crosses_a_schema()
+    {
+        var crossing = await Database.StringsAsync(
+            """
+            SELECT c.conname
+            FROM pg_constraint c
+            JOIN pg_class child ON child.oid = c.conrelid
+            JOIN pg_class parent ON parent.oid = c.confrelid
+            WHERE c.contype = 'f' AND child.relnamespace <> parent.relnamespace
+            """
+        );
+
+        crossing.ShouldBeEmpty();
+    }
+
+    [Theory]
+    [InlineData("identity", "users", true)]
+    [InlineData("identity", "refresh_tokens", true)]
+    [InlineData("catalog", "products", true)]
+    [InlineData("inventory", "inventory_items", true)]
+    [InlineData("inventory", "stock_movements", false)]
+    public async Task Should_give_every_domain_table_the_traceability_columns_and_aggregate_roots_a_version(
+        string schema,
+        string table,
+        bool isAggregateRoot
+    )
+    {
+        var columns = await Database.StringsAsync(
+            $"SELECT column_name FROM information_schema.columns WHERE table_schema = '{schema}' AND table_name = '{table}'"
+        );
+
+        columns.ShouldContain("id");
+        columns.ShouldContain("created_at");
+        columns.ShouldContain("updated_at");
+        columns.ShouldContain("deleted_at");
+        columns.Contains("version").ShouldBe(isAggregateRoot);
+
+        var types = await Database.StringsAsync(
+            $"""
+            SELECT data_type FROM information_schema.columns
+            WHERE table_schema = '{schema}' AND table_name = '{table}'
+              AND column_name IN ('created_at', 'updated_at', 'deleted_at')
+            """
+        );
+        types.ShouldAllBe(type => type == "timestamp with time zone");
+    }
+
+    [Theory]
+    [InlineData("catalog", "products", "price_amount", "numeric", 19, 4)]
+    public async Task Should_store_money_as_numeric_19_4_never_floating_point(
+        string schema,
+        string table,
+        string column,
+        string type,
+        int precision,
+        int scale
+    )
+    {
+        var definition = await Database.StringsAsync(
+            $"""
+            SELECT data_type || ',' || numeric_precision || ',' || numeric_scale
+            FROM information_schema.columns
+            WHERE table_schema = '{schema}' AND table_name = '{table}' AND column_name = '{column}'
+            """
+        );
+
+        definition.ShouldHaveSingleItem().ShouldBe($"{type},{precision},{scale}");
+    }
+
+    [Fact]
+    public void Should_have_no_pending_model_changes_so_the_snapshot_matches_the_model()
+    {
+        Identity().Database.HasPendingModelChanges().ShouldBeFalse();
+        Catalog().Database.HasPendingModelChanges().ShouldBeFalse();
+        Inventory().Database.HasPendingModelChanges().ShouldBeFalse();
+    }
+
+    [Fact]
+    public async Task Should_apply_again_without_changing_anything()
+    {
+        var context = Inventory();
+        var before = await Database.StringsAsync("SELECT migration_id FROM inventory.__ef_migrations_history");
+
+        await context.Database.MigrateAsync(TestContext.Current.CancellationToken);
+
+        (await Database.StringsAsync("SELECT migration_id FROM inventory.__ef_migrations_history")).ShouldBe(before);
+    }
+
+    [Theory]
+    [InlineData("identity", 4L)]
+    [InlineData("catalog", 3L)]
+    [InlineData("inventory", 4L)]
+    public async Task Should_undo_every_migration_and_apply_it_again(string schema, long tables)
+    {
+        ModuleDbContext context = schema switch
+        {
+            "identity" => Identity(),
+            "catalog" => Catalog(),
+            _ => Inventory(),
+        };
+        var migrator = context.GetService<IMigrator>();
+        var tablesSql =
+            $"SELECT count(*) FROM information_schema.tables WHERE table_schema = '{schema}' AND table_name <> '__ef_migrations_history'";
+
+        await migrator.MigrateAsync("0", TestContext.Current.CancellationToken);
+        var afterDown = await Database.ScalarAsync(tablesSql);
+        await context.Database.MigrateAsync(TestContext.Current.CancellationToken);
+        var afterUp = await Database.ScalarAsync(tablesSql);
+
+        afterDown.ShouldBe(0L);
+        afterUp.ShouldBe(tables);
+    }
+}
