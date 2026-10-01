@@ -1,14 +1,32 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Microsoft.AspNetCore.Mvc.Controllers;
 using Microsoft.AspNetCore.Server.Kestrel.Core;
 using Microsoft.Extensions.Configuration.Json;
+using Microsoft.Extensions.FileProviders;
 using Portfolio.Identity;
+using Portfolio.SharedKernel.API;
+using Portfolio.SharedKernel.API.Health;
 using Scalar.AspNetCore;
+
+// Compose healthcheck mode: the chiseled image has no shell or curl, so the app probes its own readiness
+// endpoint and reports through the exit code (ai/CONTAINERS.md §13.2).
+if (HealthProbe.IsProbeRequest(args))
+{
+    return await HealthProbe.RunAsync(Environment.GetEnvironmentVariable("ASPNETCORE_URLS"), TimeSpan.FromSeconds(3));
+}
 
 var builder = WebApplication.CreateBuilder(args);
 
 AddConfigurationFolder(builder);
+AddMountedSecrets(builder);
+
+// Shutdown must finish inside the orchestrator's grace period (Compose stop_grace_period, Kubernetes
+// terminationGracePeriodSeconds), which is deliberately larger (ai/CONTAINERS.md §8.2).
+builder.Services.Configure<HostOptions>(options =>
+    options.ShutdownTimeout = builder.Configuration.GetValue("Hosting:ShutdownTimeout", TimeSpan.FromSeconds(25))
+);
 
 // Hardened Kestrel defaults (ai/SECURITY.md §6.1–§6.2). Raise limits per endpoint, never globally.
 builder.WebHost.ConfigureKestrel(options =>
@@ -25,9 +43,16 @@ builder.WebHost.ConfigureKestrel(options =>
 // The only place allowed to touch the system clock: everything else receives TimeProvider by injection.
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddProblemDetails();
-builder.Services.AddIdentityModule();
+builder.Services.AddApiHealthChecks();
+builder.Services.AddIdentityModule(builder.Configuration, builder.Environment);
 builder
     .Services.AddControllers()
+    .ConfigureApplicationPartManager(manager =>
+    {
+        // Controllers are internal like the rest of the codebase; the default provider only finds public ones.
+        manager.FeatureProviders.Remove(manager.FeatureProviders.OfType<ControllerFeatureProvider>().Single());
+        manager.FeatureProviders.Add(new InternalControllerFeatureProvider());
+    })
     .AddJsonOptions(options =>
     {
         // One naming policy for the whole API: camelCase properties and camelCase string enums (ai/API_CONTRACTS.md §3).
@@ -67,14 +92,17 @@ if (app.Environment.IsDevelopment())
         .AllowAnonymous();
 }
 
+app.UseRateLimiter();
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
+app.MapApiHealthChecks();
 
 // Unmatched routes answer 404 (rendered as Problem Details by the status code pages) instead of being
 // challenged by the default-deny fallback policy, which would hide the difference between "unknown" and "protected".
 app.MapFallback("{*path}", () => Results.NotFound()).AllowAnonymous();
 await app.RunAsync();
+return 0;
 
 // Files live in configuration/ (copied next to the binaries), which the default host does not probe.
 // They are inserted right after the default appsettings sources so user secrets, environment variables
@@ -96,6 +124,26 @@ static void AddConfigurationFolder(WebApplicationBuilder builder)
         source.ResolveFileProvider();
         sources.Insert(insertAt++, source);
     }
+}
+
+// Docker/Compose secrets are files under /run/secrets (ai/SECURITY.md §5.3): a file named
+// Identity__TokenHashKey becomes the setting Identity:TokenHashKey. Only files whose name is a setting
+// (it contains "__") are loaded; other secrets, such as key files, are read from their path where needed.
+// They are added last, so they win over every other source, and are optional so local runs are unaffected.
+static void AddMountedSecrets(WebApplicationBuilder builder)
+{
+    var directory = Environment.GetEnvironmentVariable("SECRETS_DIRECTORY") ?? "/run/secrets";
+    if (!Directory.Exists(directory))
+    {
+        return;
+    }
+
+    builder.Configuration.AddKeyPerFile(source =>
+    {
+        source.FileProvider = new PhysicalFileProvider(directory);
+        source.Optional = true;
+        source.IgnoreCondition = fileName => !fileName.Contains("__", StringComparison.Ordinal);
+    });
 }
 
 // Set in OnStarting because the exception handler clears headers written earlier in the pipeline.
