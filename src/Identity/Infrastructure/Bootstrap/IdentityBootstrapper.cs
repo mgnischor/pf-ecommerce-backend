@@ -13,10 +13,9 @@ namespace Portfolio.Identity.Infrastructure;
 /// </summary>
 internal sealed class IdentityBootstrapper(
     IOptions<IdentityBootstrapOptions> options,
-    IUserRepository users,
+    IServiceScopeFactory scopes,
     PasswordPolicy passwordPolicy,
     IPasswordHasher passwordHasher,
-    IUnitOfWork unitOfWork,
     TimeProvider timeProvider,
     ILogger<IdentityBootstrapper> logger
 ) : IHostedService
@@ -53,6 +52,10 @@ internal sealed class IdentityBootstrapper(
             throw new InvalidOperationException("A bootstrap account has an unknown access level.");
         }
 
+        // A hosted service is a singleton: every account gets its own scope, hence its own database context.
+        await using var scope = scopes.CreateAsyncScope();
+        var users = scope.ServiceProvider.GetRequiredService<IUserRepository>();
+
         if (await users.FindByEmailAsync(email.Value, cancellationToken) is not null)
         {
             return false;
@@ -69,7 +72,17 @@ internal sealed class IdentityBootstrapper(
         // The policy check guarantees a non-null password.
         var hash = await passwordHasher.HashAsync(account.Password!, cancellationToken);
         await users.AddAsync(User.Register(email.Value, hash, level, timeProvider), cancellationToken);
-        await unitOfWork.SaveChangesAsync(cancellationToken);
+
+        try
+        {
+            await scope.ServiceProvider.GetRequiredService<IdentityDbContext>().SaveChangesAsync(cancellationToken);
+        }
+        catch (PersistenceConflictException)
+        {
+            // Another replica starting at the same time created it first: the account exists, which is the goal.
+            return false;
+        }
+
         return true;
     }
 }
