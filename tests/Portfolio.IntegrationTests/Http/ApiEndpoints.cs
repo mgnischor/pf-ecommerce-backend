@@ -58,6 +58,7 @@ internal static class ApiEndpoints
             "/api/v1/payments/webhooks/example-provider",
             Anonymous
         ),
+        ("POST", "api/v1/inventory/items", "/api/v1/inventory/items", "manager"),
         ("GET", "api/v1/inventory/items/{sku}", "/api/v1/inventory/items/CAF-600-PRT", "collaborator"),
         (
             "POST",
