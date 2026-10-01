@@ -1,0 +1,389 @@
+# Single-host production deployment (ai/CONTAINERS.md §5). Kubernetes (kubernetes/) is the path for multi-node,
+# autoscaled deployments. Every rule of CONTAINERS.md §3 and §5 applies here without relaxation.
+#
+#   1. Create the secrets:   bash scripts/init-secrets.sh prod        (or: pwsh scripts/init-secrets.ps1 -Mode prod)
+#   2. Set the variables:    API_IMAGE, API_ALLOWED_HOSTS, JWT_ISSUER (see the ${VAR:?...} messages below)
+#   3. Deploy:               docker compose -f docker-compose-prod.yml up -d
+#
+# - The application image comes from the private registry, pinned to version AND digest; there is no `build:`.
+# - Backing-service images are pinned by digest; `latest` is forbidden. Versions match docker-compose-dev.yml.
+# - Secrets are files (./secrets, untracked, ai/SECURITY.md §5); nothing sensitive is an environment variable
+#   or a command-line argument of the application.
+# - TLS terminates at an external reverse proxy or load balancer that forwards to API_BIND_ADDRESS:API_PORT. It must
+#   never route /health/*, /metrics, or the observability backends to the internet (ai/SECURITY.md §6.3).
+# - Networks: `backend` and `observability` are internal (no route out of the host); only the API joins `edge`.
+name: pf-ecommerce
+
+x-hardening: &hardening
+    read_only: true
+    cap_drop: [ALL]
+    security_opt:
+        - no-new-privileges:true
+    restart: unless-stopped
+    logging:
+        driver: json-file
+        options:
+            max-size: "10m"
+            max-file: "5"
+
+services:
+    ecommerce-api:
+        <<: *hardening
+        image: ${API_IMAGE:?set API_IMAGE to registry/ecommerce-api:<version>@sha256:<digest>}
+        ports:
+            - "${API_BIND_ADDRESS:-127.0.0.1}:${API_PORT:-8080}:8080"
+        environment:
+            ASPNETCORE_ENVIRONMENT: Production
+            AllowedHosts: "${API_ALLOWED_HOSTS:?set API_ALLOWED_HOSTS to the public host name(s), separated by ;}"
+            Jwt__Issuer: "${JWT_ISSUER:?set JWT_ISSUER to the public https URL of the API}"
+            Jwt__ActiveKeyId: "${JWT_ACTIVE_KEY_ID:-key-1}"
+            Jwt__Keys__0__Id: "${JWT_ACTIVE_KEY_ID:-key-1}"
+            Jwt__Keys__0__PrivateKeyPemFile: /run/secrets/jwt_es384_private_key
+            Identity__Bootstrap__Accounts__0__AccessLevel: administrator
+            OTEL_SERVICE_NAME: ecommerce-api
+            OTEL_RESOURCE_ATTRIBUTES: "deployment.environment.name=production,service.version=${API_VERSION:-unknown}"
+            OTEL_EXPORTER_OTLP_ENDPOINT: "http://otel-collector:4317"
+        # Secrets are mounted as files. Names containing "__" become configuration keys (Program.cs); the key
+        # file is read from its path. Connection strings and credentials never appear in the environment.
+        secrets:
+            - source: jwt_es384_private_key
+              target: jwt_es384_private_key
+            - source: identity_token_hash_key
+              target: Identity__TokenHashKey
+            - source: bootstrap_admin_email
+              target: Identity__Bootstrap__Accounts__0__Email
+            - source: bootstrap_admin_password
+              target: Identity__Bootstrap__Accounts__0__Password
+            - source: conn_postgres
+              target: ConnectionStrings__Postgres
+            - source: conn_valkey
+              target: ConnectionStrings__Valkey
+            - source: conn_rabbitmq
+              target: ConnectionStrings__RabbitMQ
+        tmpfs:
+            - /tmp:size=64m,mode=1777
+        pids_limit: 256
+        healthcheck:
+            # App-provided probe mode: the chiseled runtime image ships no shell, curl, or wget.
+            test: ["CMD", "dotnet", "Portfolio.dll", "--health-check"]
+            interval: 15s
+            timeout: 5s
+            retries: 3
+            start_period: 20s
+        deploy:
+            resources:
+                limits:
+                    cpus: "1.0"
+                    memory: 512M
+        # Larger than HostOptions.ShutdownTimeout (25 s), so the host drains before Docker kills it.
+        stop_grace_period: 35s
+        depends_on:
+            postgres:
+                condition: service_healthy
+            valkey:
+                condition: service_healthy
+            rabbitmq:
+                condition: service_healthy
+            otel-collector:
+                condition: service_started
+        networks:
+            - edge
+            - backend
+            - observability
+
+    postgres:
+        <<: *hardening
+        image: postgres:18.6-alpine3.24@sha256:77f585114c32fbca283dc835b0596f4e52b51b4c6662d7810b2f4084f60a1873
+        user: "70:70"
+        environment:
+            POSTGRES_DB: ecommerce
+            POSTGRES_USER: app
+            POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
+        secrets:
+            - postgres_password
+        volumes:
+            - pgdata:/var/lib/postgresql
+        tmpfs:
+            - /tmp:size=64m,mode=1777
+            - /run/postgresql:size=8m,uid=70,gid=70
+        pids_limit: 256
+        healthcheck:
+            test: ["CMD-SHELL", "pg_isready -U app -d ecommerce"]
+            interval: 10s
+            timeout: 5s
+            retries: 5
+            start_period: 15s
+        deploy:
+            resources:
+                limits:
+                    cpus: "2.0"
+                    memory: 1G
+        stop_grace_period: 60s
+        networks:
+            - backend
+
+    valkey:
+        <<: *hardening
+        image: valkey/valkey:9.1.2-alpine3.24@sha256:48332870af354a799964c0012ae1194a0bf2bf894eb508f945810596dc2d8d11
+        user: "999:1000"
+        # A cache, not a source of truth (ai/DATABASE.md §4): no persistence, bounded memory, LRU eviction.
+        # Valkey cannot read its password from a file, so the (alpine) entrypoint expands it from the secret
+        # without it ever appearing in the compose file or the environment.
+        entrypoint:
+            - sh
+            - -c
+            - exec valkey-server --requirepass "$$(cat /run/secrets/valkey_password)" --save "" --appendonly no --maxmemory 192mb --maxmemory-policy allkeys-lru
+        secrets:
+            - valkey_password
+        volumes:
+            - valkeydata:/data
+        tmpfs:
+            - /tmp:size=16m,mode=1777
+        pids_limit: 128
+        healthcheck:
+            test: ["CMD-SHELL", "REDISCLI_AUTH=\"$$(cat /run/secrets/valkey_password)\" valkey-cli ping | grep -q PONG"]
+            interval: 10s
+            timeout: 5s
+            retries: 5
+        deploy:
+            resources:
+                limits:
+                    cpus: "0.5"
+                    memory: 256M
+        networks:
+            - backend
+
+    rabbitmq:
+        <<: *hardening
+        image: rabbitmq:4.3.6-alpine@sha256:9a5494b32def2c288a755c933ea2ffd7f4a28647f7648776ad8b15507493f702
+        user: "100:101"
+        hostname: rabbitmq
+        environment:
+            RABBITMQ_DEFAULT_USER_FILE: /run/secrets/rabbitmq_user
+            RABBITMQ_DEFAULT_PASS_FILE: /run/secrets/rabbitmq_password
+        secrets:
+            - rabbitmq_user
+            - rabbitmq_password
+        volumes:
+            - rabbitmqdata:/var/lib/rabbitmq
+        tmpfs:
+            - /tmp:size=32m,mode=1777
+            - /etc/rabbitmq/conf.d:size=1m,uid=100,gid=101
+        pids_limit: 512
+        healthcheck:
+            test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+            interval: 15s
+            timeout: 10s
+            retries: 5
+            start_period: 30s
+        deploy:
+            resources:
+                limits:
+                    cpus: "1.0"
+                    memory: 512M
+        stop_grace_period: 60s
+        networks:
+            - backend
+
+    otel-collector:
+        <<: *hardening
+        image: otel/opentelemetry-collector-contrib:0.161.0@sha256:fd328de2552466ad78385e1b1289c3f2402b1c45f265b252aab1955b42845ac1
+        command: ["--config=/etc/otelcol/config.yaml"]
+        user: "10001:10001"
+        volumes:
+            - ./observability/otel-collector/config.yaml:/etc/otelcol/config.yaml:ro
+        pids_limit: 128
+        # The distroless image has no shell or curl; the health_check extension is reachable only on the internal
+        # network, so liveness is the process itself (restart: unless-stopped recovers a crash).
+        deploy:
+            resources:
+                limits:
+                    cpus: "0.5"
+                    memory: 256M
+        depends_on:
+            prometheus:
+                condition: service_healthy
+            loki:
+                condition: service_healthy
+            tempo:
+                condition: service_healthy
+        networks:
+            - observability
+
+    prometheus:
+        <<: *hardening
+        image: prom/prometheus:v3.15.0@sha256:efd719c99d83b060d9daefdcf00360461adf279f45ef5391f8d111892118753e
+        user: "65534:65534"
+        command:
+            - --config.file=/etc/prometheus/prometheus.yml
+            - --storage.tsdb.path=/prometheus
+            - --storage.tsdb.retention.time=15d
+            - --web.enable-otlp-receiver
+            - --web.console.libraries=/usr/share/prometheus/console_libraries
+        volumes:
+            - ./observability/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+            - prometheusdata:/prometheus
+        tmpfs:
+            - /tmp:size=16m,mode=1777
+        pids_limit: 256
+        healthcheck:
+            test: ["CMD", "promtool", "check", "healthy", "--url=http://localhost:9090"]
+            interval: 15s
+            timeout: 5s
+            retries: 5
+            start_period: 20s
+        deploy:
+            resources:
+                limits:
+                    cpus: "1.0"
+                    memory: 512M
+        networks:
+            - observability
+
+    loki:
+        <<: *hardening
+        image: grafana/loki:3.7.8@sha256:1107dd5274e0ada47e42472b7a7e71f3b2a2fe878878108f3e2f9e51528f0193
+        user: "10001:10001"
+        command: ["-config.file=/etc/loki/loki.yaml"]
+        volumes:
+            - ./observability/loki/loki.yaml:/etc/loki/loki.yaml:ro
+            - lokidata:/loki
+        tmpfs:
+            - /tmp:size=32m,mode=1777
+        pids_limit: 256
+        healthcheck:
+            test: ["CMD", "/usr/bin/loki", "-version"]
+            interval: 15s
+            timeout: 5s
+            retries: 5
+            start_period: 20s
+        deploy:
+            resources:
+                limits:
+                    cpus: "1.0"
+                    memory: 512M
+        networks:
+            - observability
+
+    tempo:
+        <<: *hardening
+        image: grafana/tempo:3.1.0@sha256:3076b8dcdfb32fd6bc5ccef85e7b7313e6199b9cb84366257fc17ecb696db5fd
+        user: "10001:10001"
+        command: ["-config.file=/etc/tempo/tempo.yaml"]
+        volumes:
+            - ./observability/tempo/tempo.yaml:/etc/tempo/tempo.yaml:ro
+            - tempodata:/var/tempo
+        tmpfs:
+            - /tmp:size=32m,mode=1777
+        pids_limit: 256
+        healthcheck:
+            test: ["CMD", "/tempo", "-version"]
+            interval: 15s
+            timeout: 5s
+            retries: 5
+            start_period: 20s
+        deploy:
+            resources:
+                limits:
+                    cpus: "1.0"
+                    memory: 512M
+        networks:
+            - observability
+
+    # The only observability component reachable from outside the host network, and only behind SSO at the
+    # reverse proxy (ai/OBSERVABILITY.md §13): bind it to loopback and let the proxy publish it.
+    grafana:
+        <<: *hardening
+        image: grafana/grafana:13.2.3@sha256:b28bae15e219c998fb0e0424ed724930cc61b1f61fb404d47c862f9a23f9e572
+        user: "472:472"
+        ports:
+            - "127.0.0.1:${GRAFANA_PORT:-3000}:3000"
+        environment:
+            GF_SECURITY_ADMIN_USER: admin
+            GF_SECURITY_ADMIN_PASSWORD__FILE: /run/secrets/grafana_admin_password
+            GF_USERS_ALLOW_SIGN_UP: "false"
+            GF_AUTH_ANONYMOUS_ENABLED: "false"
+            GF_SECURITY_DISABLE_GRAVATAR: "true"
+            GF_ANALYTICS_REPORTING_ENABLED: "false"
+            GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+            GF_ANALYTICS_CHECK_FOR_PLUGIN_UPDATES: "false"
+            GF_SECURITY_COOKIE_SECURE: "true"
+            GF_SECURITY_COOKIE_SAMESITE: strict
+        secrets:
+            - grafana_admin_password
+        volumes:
+            - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
+            - grafanadata:/var/lib/grafana
+        tmpfs:
+            - /tmp:size=32m,mode=1777
+        pids_limit: 256
+        healthcheck:
+            test: ["CMD", "grafana", "server", "--help"]
+            interval: 20s
+            timeout: 10s
+            retries: 5
+            start_period: 30s
+        deploy:
+            resources:
+                limits:
+                    cpus: "0.5"
+                    memory: 256M
+        depends_on:
+            prometheus:
+                condition: service_healthy
+            loki:
+                condition: service_healthy
+            tempo:
+                condition: service_healthy
+        networks:
+            - observability
+            - edge
+
+volumes:
+    pgdata:
+    valkeydata:
+    rabbitmqdata:
+    prometheusdata:
+    lokidata:
+    tempodata:
+    grafanadata:
+
+networks:
+    # External-facing: the API (published to the reverse proxy) and Grafana (behind SSO).
+    edge:
+        driver: bridge
+    # Application backing services. No route out of the host.
+    backend:
+        driver: bridge
+        internal: true
+    # Telemetry pipeline. No route out of the host.
+    observability:
+        driver: bridge
+        internal: true
+
+# File-based secrets (ai/SECURITY.md §5.3). Create them with scripts/init-secrets.*; ./secrets is untracked.
+secrets:
+    postgres_password:
+        file: ./secrets/postgres_password.txt
+    valkey_password:
+        file: ./secrets/valkey_password.txt
+    rabbitmq_user:
+        file: ./secrets/rabbitmq_user.txt
+    rabbitmq_password:
+        file: ./secrets/rabbitmq_password.txt
+    grafana_admin_password:
+        file: ./secrets/grafana_admin_password.txt
+    jwt_es384_private_key:
+        file: ./secrets/jwt_es384_private_key.pem
+    identity_token_hash_key:
+        file: ./secrets/identity_token_hash_key.txt
+    bootstrap_admin_email:
+        file: ./secrets/bootstrap_admin_email.txt
+    bootstrap_admin_password:
+        file: ./secrets/bootstrap_admin_password.txt
+    conn_postgres:
+        file: ./secrets/conn_postgres.txt
+    conn_valkey:
+        file: ./secrets/conn_valkey.txt
+    conn_rabbitmq:
+        file: ./secrets/conn_rabbitmq.txt
