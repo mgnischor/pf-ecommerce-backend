@@ -5,9 +5,12 @@ using Microsoft.AspNetCore.Mvc.Controllers;
 using Microsoft.AspNetCore.Server.Kestrel.Core;
 using Microsoft.Extensions.Configuration.Json;
 using Microsoft.Extensions.FileProviders;
+using Portfolio.Catalog;
 using Portfolio.Identity;
+using Portfolio.Inventory;
 using Portfolio.SharedKernel.API;
 using Portfolio.SharedKernel.API.Health;
+using Portfolio.SharedKernel.Infrastructure;
 using Scalar.AspNetCore;
 
 // Compose healthcheck mode: the chiseled image has no shell or curl, so the app probes its own readiness
@@ -44,7 +47,10 @@ builder.WebHost.ConfigureKestrel(options =>
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddProblemDetails();
 builder.Services.AddApiHealthChecks();
+builder.Services.AddPostgres(builder.Configuration, builder.Environment);
 builder.Services.AddIdentityModule(builder.Configuration, builder.Environment);
+builder.Services.AddCatalogModule(builder.Environment);
+builder.Services.AddInventoryModule(builder.Environment);
 builder
     .Services.AddControllers()
     .ConfigureApplicationPartManager(manager =>
@@ -92,6 +98,7 @@ if (app.Environment.IsDevelopment())
         .AllowAnonymous();
 }
 
+app.UseMiddleware<PersistenceConflictMiddleware>();
 app.UseRateLimiter();
 app.UseAuthentication();
 app.UseAuthorization();
