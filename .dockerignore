@@ -41,7 +41,9 @@ Portfolio.http
 infrastructure
 kubernetes
 observability
-scripts
+scripts/*
+!scripts/build-migrations-bundles.sh
+database
 Dockerfile
 .dockerignore
 docker-compose*.yml
