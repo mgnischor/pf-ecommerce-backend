@@ -135,9 +135,11 @@ dotnet user-secrets set "Identity:Bootstrap:Accounts:0:AccessLevel" "developer" 
 
 ## Known limitations
 
-1. **Storage is in-memory** (`InMemory*Repository`): accounts and sessions are lost on restart and are not shared
-   between instances. The EF Core mapping, the `identity` schema, and migrations replace it; the `version` column
-   then arbitrates concurrent refresh-token rotation across instances.
+1. **Accounts and refresh tokens live in PostgreSQL** (schema `identity`, `docs/database.md`). The `version` column
+   arbitrates concurrent refresh-token rotation across instances: of two simultaneous refreshes of one token, one
+   commits and the other is refused (`409`, `CONCURRENT_UPDATE`); two sessions never come out of one token. Each
+   authenticated request reads the account to validate the token version, which makes revocation immediate and costs
+   one query per request until the Valkey cache exists.
 2. **The `jti` blocklist is in-memory**; the Valkey-backed store replaces it.
 3. **Client IP for rate limiting** is the socket address; behind a proxy, forwarded headers must be configured with
    trusted proxies before the limits are meaningful.
