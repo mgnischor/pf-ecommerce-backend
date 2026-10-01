@@ -74,3 +74,33 @@ EXPOSE 8080
 # `dotnet Portfolio.dll --health-check` (the image has no shell, curl, or wget).
 # Exec form, so SIGTERM reaches the process and the host drains gracefully.
 ENTRYPOINT ["dotnet", "Portfolio.dll"]
+
+# ---------------------------------------------------------------------------------------------------------
+# Migrations (ai/DATABASE.md §6.1, ai/CONTAINERS.md §6.7). One self-contained EF Core bundle per bounded context,
+# built from the same sources as the application so schema and code ship together. It is a separate image and
+# runs as a job with the DDL-capable role before a new version rolls out, never inside the API:
+#
+#   docker build --target migrations -t ecommerce-migrations:1.0.0 .
+#   docker run --rm -e PF_DESIGN_TIME_CONNECTION_FILE=/run/secrets/conn_postgres_migrator ... /migrations/migrate-identity
+#
+# Run the bundles in order (identity, catalog, inventory; they are independent). A bundle takes the connection from
+# the secret file named by PF_DESIGN_TIME_CONNECTION_FILE, so it never appears on a command line.
+# ---------------------------------------------------------------------------------------------------------
+FROM build AS bundles
+
+COPY .config/ .config/
+COPY scripts/build-migrations-bundles.sh scripts/
+RUN --mount=type=cache,target=/root/.nuget/packages     bash scripts/build-migrations-bundles.sh linux-x64 /app/migrations
+
+FROM mcr.microsoft.com/dotnet/runtime-deps:10.0.12-noble-chiseled@sha256:18d4848091a40d13dbfdd6a8340c1657dc3e2f2d7fa2f042e9d162e68669dbc9 AS migrations
+
+LABEL org.opencontainers.image.title="pf-ecommerce-migrations"       org.opencontainers.image.description="EF Core migrations bundles of the pf-ecommerce bounded contexts"
+
+WORKDIR /migrations
+COPY --from=bundles /app/migrations/ .
+
+ENV DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=true
+
+USER $APP_UID
+
+# No ENTRYPOINT: the orchestrator runs one bundle per job step (identity, catalog, inventory).
