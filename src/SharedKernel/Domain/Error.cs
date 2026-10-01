@@ -58,6 +58,12 @@ internal sealed record Error(
     /// <param name="ruleId">Violated business rule identifier.</param>
     public static Error Forbidden(string code, string? ruleId = null) => new(ErrorType.Forbidden, code, RuleId: ruleId);
 
+    /// <summary>Creates a failure for a request whose <c>If-Match</c> precondition does not hold (stale version).</summary>
+    /// <param name="code">Stable error code.</param>
+    /// <param name="parameters">Message parameters.</param>
+    public static Error PreconditionFailed(string code, IReadOnlyDictionary<string, object>? parameters = null) =>
+        new(ErrorType.PreconditionFailed, code, Parameters: parameters);
+
     /// <summary>Value equality, including the message parameters (dictionaries compare by content).</summary>
     /// <param name="other">Error to compare with.</param>
     public bool Equals(Error? other) =>
