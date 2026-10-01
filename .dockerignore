@@ -1,0 +1,46 @@
+# Keep the build context small and free of secrets (ai/CONTAINERS.md §2.4).
+
+# Version control and tooling
+.git
+.gitattributes
+.gitignore
+.github
+.claude
+.vs
+.vscode
+.idea
+workspace
+
+# Secrets and local configuration
+.env
+.env.*
+!.env.example
+secrets
+*.pem
+*.key
+*.pfx
+*.p12
+appsettings.*.local.json
+*.user
+
+# Build output and test results
+**/bin
+**/obj
+TestResults
+tests
+coverage
+
+# Documentation and standards
+ai
+docs
+*.md
+Portfolio.http
+
+# Infrastructure, orchestration, and operations files are not part of the image
+infrastructure
+kubernetes
+observability
+scripts
+Dockerfile
+.dockerignore
+docker-compose*.yml
