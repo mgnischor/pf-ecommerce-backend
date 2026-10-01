@@ -194,6 +194,61 @@ the token specification, and how to operate the secrets are in `docs/business-ru
 Outside `Development` the host refuses to start without the signing key and the token-hash key. In `Development` it
 generates throw-away keys, so `dotnet run` works, but tokens stop validating on restart.
 
+## Containers
+
+| Piece                                                                                    | File                                                  |
+| ---------------------------------------------------------------------------------------- | ----------------------------------------------------- |
+| Production image (multi-stage, chiseled, non-root, digest-pinned)                        | `Dockerfile`                                          |
+| Development stack: API, PostgreSQL, Valkey, RabbitMQ, all-in-one telemetry (`otel-lgtm`) | `docker-compose-dev.yml`                              |
+| Single-host production stack: the above plus Collector, Prometheus, Loki, Tempo, Grafana | `docker-compose-prod.yml`                             |
+| Collector, Prometheus, Loki, Tempo, and Grafana configuration                            | `observability/`                                      |
+| Credential generators                                                                    | `scripts/init-secrets.sh`, `scripts/init-secrets.ps1` |
+| Documented deviations from `ai/CONTAINERS.md`                                            | `docs/container-exceptions.md`                        |
+
+Pinned versions (latest stable at the time of writing, each by tag **and** digest; Renovate/Dependabot update both):
+
+| Component          | Version             | Component                      | Version |
+| ------------------ | ------------------- | ------------------------------ | ------- |
+| .NET SDK           | 10.0.401            | Prometheus                     | v3.15.0 |
+| ASP.NET (chiseled) | 10.0.12             | Loki                           | 3.7.8   |
+| PostgreSQL         | 18.6 (alpine 3.24)  | Tempo                          | 3.1.0   |
+| Valkey             | 9.1.2 (alpine 3.24) | Grafana                        | 13.2.3  |
+| RabbitMQ           | 4.3.6 (alpine)      | OTel Collector (contrib)       | 0.161.0 |
+|                    |                     | `grafana/otel-lgtm` (dev only) | 0.34.0  |
+
+**Development.** Generate credentials once (random values, untracked `.env`) and start the stack:
+
+```bash
+bash scripts/init-secrets.sh dev          # Windows: pwsh scripts/init-secrets.ps1 -Mode dev
+docker compose -f docker-compose-dev.yml up --build
+```
+
+The API is on `http://localhost:8080` (Scalar at `/api/v1/docs`), Grafana on `:3000`, the RabbitMQ UI on `:15672`. Every
+published port is bound to `127.0.0.1` and can be moved in `.env` (`API_PORT`, `POSTGRES_PORT`, `VALKEY_PORT`,
+`RABBITMQ_PORT`, `RABBITMQ_MANAGEMENT_PORT`, `GRAFANA_PORT`) when it clashes with something already running, such as a
+local PostgreSQL or RabbitMQ. The `.env` account (`DEV_ACCOUNT_EMAIL`) is created with the `developer` level.
+
+**Production (single host).** Secrets are files, never environment variables:
+
+```bash
+bash scripts/init-secrets.sh prod --admin-email admin@example.com   # writes ./secrets/*
+cp .env.prod.example .env.prod                                      # API_IMAGE, API_ALLOWED_HOSTS, JWT_ISSUER
+docker compose --env-file .env.prod -f docker-compose-prod.yml up -d
+```
+
+`--env-file` keeps the development `.env` out of the production stack. TLS terminates at an external reverse proxy
+that forwards to the API port; it must never route `/health/*` or the observability backends to the internet. Only the
+API and Grafana publish a port (loopback by default); `backend` and `observability` are internal networks.
+
+Every container runs non-root with a read-only root filesystem, all capabilities dropped, `no-new-privileges`, and CPU,
+memory, and PID limits. The API healthcheck is the application itself (`dotnet Portfolio.dll --health-check`, which calls
+`/health/ready`), because the chiseled image has no shell or `curl`. On `SIGTERM` readiness fails immediately, in-flight
+requests drain within 25 s, and Docker waits 35 s before killing the container.
+
+Known limitations: the application emits no OpenTelemetry yet (the pipeline is verified end to end with a synthetic
+OTLP record, including redaction), readiness has no PostgreSQL/Valkey/RabbitMQ checks until those integrations exist,
+and ASP.NET Core Data Protection logs a warning about its in-memory key ring because nothing persists keys yet.
+
 ## Quality Gates
 
 Defined by `ai/CODE.md §2` and enforced locally and in `.github/workflows/ci.yml`:
@@ -216,9 +271,10 @@ Defined by `ai/CODE.md §2` and enforced locally and in `.github/workflows/ci.ym
 - [ ] EF Core mappings + versioned migrations
 - [ ] Transactional outbox + RabbitMQ integration events
 - [ ] Valkey caching with explicit TTL/invalidation
-- [ ] OpenTelemetry instrumentation (traces/metrics/logs)
+- [ ] OpenTelemetry instrumentation in the application (the Collector/Prometheus/Loki/Tempo/Grafana stack is ready)
 - [x] API surface mapped (34 endpoints, contracts, OpenAPI, `Portfolio.http`)
 - [x] JWT authentication, refresh-token rotation, five access levels, and endpoint protection
+- [x] Dockerfile and Compose stacks (development and production) with pinned versions
 - [ ] Wire business endpoints to use cases; persistent Identity store (EF Core); MFA for staff; `Idempotency-Key` storage
 
 ## License
