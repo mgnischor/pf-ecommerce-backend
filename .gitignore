@@ -176,6 +176,7 @@ backend.*.hcl
 .env
 .env.*
 !.env.example
+!.env.prod.example
 secrets/
 *.pem
 *.key
