@@ -51,9 +51,10 @@ dotnet_diagnostic.MA0004.severity = none
 # Method names in the Application layer follow the domain language of use cases.
 dotnet_diagnostic.CA1062.severity = none
 
-# Public members (controller actions) are the API surface: their parameters define the contract even
-# while an operation is still a stub.
-dotnet_code_quality_unused_parameters = non_public
+# Controller actions that still answer 501 bind parameters only to define the contract (route, headers,
+# body). Remove this exemption when the operations are wired to their use cases.
+[src/**/API/Controllers/*.cs]
+dotnet_diagnostic.IDE0060.severity = none
 
 # Contracts are grouped per resource (enums and records together) instead of one file per type.
 [src/**/API/Contracts/*.cs]
@@ -66,6 +67,9 @@ dotnet_diagnostic.CA1707.severity = none
 dotnet_diagnostic.S1144.severity = none
 dotnet_diagnostic.S2699.severity = none
 dotnet_diagnostic.S3928.severity = none
+# Shouldly assertions compare strings ordinally by default; explicit comparers add noise.
+dotnet_diagnostic.MA0002.severity = none
+dotnet_diagnostic.MA0006.severity = none
 # Several cohesive test classes per file, grouped by behavior (ai/TESTS.md §3.3).
 dotnet_diagnostic.MA0048.severity = none
 # Shared builders are intentionally static helpers.
