@@ -57,7 +57,12 @@ EOF
         mkdir -p secrets
         chmod 0700 secrets
         pg="$(random)"; valkey="$(random)"; rabbit="$(random)"
+        migrator="$(random)"; runtime="$(random)"; reporting="$(random)"
         write_secret postgres_password.txt "$pg"
+        # Least privilege (ai/DATABASE.md §3.2): the migration job and the API never use the bootstrap role.
+        write_secret postgres_migrator_password.txt "$migrator"
+        write_secret postgres_runtime_password.txt "$runtime"
+        write_secret postgres_readonly_password.txt "$reporting"
         write_secret valkey_password.txt "$valkey"
         # RabbitMQ 4.3 reads the default credentials from a configuration file (the *_FILE variables are deprecated).
         write_secret rabbitmq_credentials.conf "default_user = app"$'\n'"default_pass = $rabbit"
@@ -65,7 +70,8 @@ EOF
         write_secret identity_token_hash_key.txt "$(openssl rand -base64 64 | tr -d '\n')"
         write_secret bootstrap_admin_email.txt "$admin_email"
         write_secret bootstrap_admin_password.txt "$(random 16)"
-        write_secret conn_postgres.txt "Host=postgres;Port=5432;Database=ecommerce;Username=app;Password=$pg"
+        write_secret conn_postgres.txt "Host=postgres;Port=5432;Database=ecommerce;Username=app_runtime;Password=$runtime"
+        write_secret conn_postgres_migrator.txt "Host=postgres;Port=5432;Database=ecommerce;Username=app_migrator;Password=$migrator"
         write_secret conn_valkey.txt "valkey:6379,password=$valkey"
         write_secret conn_rabbitmq.txt "amqp://app:$rabbit@rabbitmq:5672"
         if [ ! -e secrets/jwt_es384_private_key.pem ]; then
