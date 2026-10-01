@@ -1,5 +1,7 @@
 # pf-ecommerce-backend
 
+![Application Banner](./resource/image/ecommere_banner.jpg)
+
 A complete e-commerce platform built as a portfolio project. Modular monolith in C# / .NET 10, organized with Domain-Driven Design (DDD) by bounded context.
 
 ## Overview
