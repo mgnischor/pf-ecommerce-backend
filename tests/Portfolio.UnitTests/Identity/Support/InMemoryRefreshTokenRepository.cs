@@ -1,9 +1,9 @@
 using System.Collections.Concurrent;
 using Portfolio.Identity.Domain;
 
-namespace Portfolio.Identity.Infrastructure;
+namespace Portfolio.UnitTests.Identity.Support;
 
-/// <summary>Temporary in-process store for refresh tokens. See <see cref="InMemoryUserRepository"/> for the caveats.</summary>
+/// <summary>In-process stand-in for the EF Core refresh-token repository. See <see cref="InMemoryUserRepository"/>.</summary>
 internal sealed class InMemoryRefreshTokenRepository : IRefreshTokenRepository
 {
     private readonly ConcurrentDictionary<Guid, RefreshToken> _byId = new();
