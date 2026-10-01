@@ -3,16 +3,17 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Portfolio.Inventory.API.Contracts;
 using Portfolio.SharedKernel.API;
+using Portfolio.SharedKernel.API.Authorization;
 using Portfolio.SharedKernel.API.Contracts;
 
 namespace Portfolio.Inventory.API.Controllers;
 
 /// <summary>Stock levels and manual adjustments, for catalog staff.</summary>
 [Route("api/v1/inventory/items")]
-[Authorize(Roles = ApiRoles.CatalogStaff)]
+[Authorize(Policy = AccessPolicies.Collaborator)]
 [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized, "application/problem+json")]
 [ProducesResponseType<ProblemDetails>(StatusCodes.Status403Forbidden, "application/problem+json")]
-public sealed class InventoryItemsController : ApiControllerBase
+internal sealed class InventoryItemsController : ApiControllerBase
 {
     /// <summary>Gets the stock level of a SKU.</summary>
     /// <param name="sku">Stock-keeping unit (case-insensitive).</param>
@@ -34,6 +35,7 @@ public sealed class InventoryItemsController : ApiControllerBase
     /// <param name="ifMatch">ETag of the version the client read.</param>
     /// <param name="request">Signed quantity and reason.</param>
     [HttpPost("{sku}/adjustments")]
+    [Authorize(Policy = AccessPolicies.Manager)]
     [ProducesResponseType<InventoryItemResponse>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound, "application/problem+json")]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status412PreconditionFailed, "application/problem+json")]
