@@ -75,3 +75,28 @@ jobs:
                   name: coverage
                   path: TestResults/
                   if-no-files-found: ignore
+
+    containers:
+        name: Container images and Compose
+        runs-on: ubuntu-latest
+        timeout-minutes: 20
+        steps:
+            - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+              with:
+                  persist-credentials: false
+
+            - name: Validate the Compose files
+              run: |
+                  # Placeholders only: the files fail loudly (${VAR:?...}) when a required value is missing.
+                  cp .env.example .env
+                  docker compose -f docker-compose-dev.yml config -q
+                  cp .env.prod.example .env.prod
+                  docker compose --env-file .env.prod -f docker-compose-prod.yml config -q
+
+            - name: Validate the Collector configuration
+              run: |
+                  image=$(grep -o 'otel/opentelemetry-collector-contrib:[^ ]*' docker-compose-prod.yml | head -1)
+                  docker run --rm -v "$PWD:/work:ro" "$image" validate --config=/work/observability/otel-collector/config.yaml
+
+            - name: Build the application image
+              run: docker build --target runtime --build-arg VERSION=ci --build-arg REVISION="$GITHUB_SHA" -t ecommerce-api:ci .
