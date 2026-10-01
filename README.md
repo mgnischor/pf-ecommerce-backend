@@ -73,7 +73,8 @@ src/Catalog/
 ## Prerequisites
 
 - .NET 10 SDK
-- PostgreSQL 16+
+- PostgreSQL 16+ (18 in Compose and in the tests)
+- Docker (the integration tests start PostgreSQL with Testcontainers)
 - Valkey 7+
 - RabbitMQ 3+
 
@@ -84,6 +85,10 @@ dotnet restore
 dotnet build
 dotnet run --project Portfolio.csproj
 ```
+
+The API needs a PostgreSQL database: set `ConnectionStrings__Postgres` (or start the Compose stack, below). In
+`Development` it applies its own migrations at start (`Database:MigrateOnStartup`); everywhere else a migrations bundle
+does (`docs/database.md`).
 
 Run the test suites (xUnit v3 on Microsoft.Testing.Platform, enabled in `global.json`):
 
@@ -103,13 +108,13 @@ API reference (development):
 
 Connection strings, endpoints, credentials, and feature flags are externalized via environment variables / user secrets. Never commit secrets.
 
-| Setting                       | Description                                                                                                                                                          |
-| ----------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ConnectionStrings__Postgres` | PostgreSQL connection string (Npgsql)                                                                                                                                |
-| `ConnectionStrings__Valkey`   | Valkey connection string                                                                                                                                             |
-| `ConnectionStrings__RabbitMQ` | RabbitMQ connection string                                                                                                                                           |
-| `OTEL_EXPORTER_OTLP_ENDPOINT` | OpenTelemetry collector endpoint                                                                                                                                     |
-| `AllowedHosts`                | Semicolon-separated host names the API answers to. Defaults to `localhost` (`*` only in `Development`); **set it to the real host names in every other environment** |
+| Setting                       | Description                                                                                                                                                               |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ConnectionStrings__Postgres` | PostgreSQL connection string (Npgsql). **Required**: the host refuses to start without it. Pool, timeout, and retry settings live under `Database:*` (`docs/database.md`) |
+| `ConnectionStrings__Valkey`   | Valkey connection string                                                                                                                                                  |
+| `ConnectionStrings__RabbitMQ` | RabbitMQ connection string                                                                                                                                                |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | OpenTelemetry collector endpoint                                                                                                                                          |
+| `AllowedHosts`                | Semicolon-separated host names the API answers to. Defaults to `localhost` (`*` only in `Development`); **set it to the real host names in every other environment**      |
 
 Non-secret defaults live in `configuration/appsettings.json` and `configuration/appsettings.{Environment}.json`; the
 composition root loads them explicitly (the default host only probes the content root). User secrets, environment
@@ -148,10 +153,16 @@ Implemented so far (see `ai/TASKS.md` for full progress). Types are `internal` b
   BR-CAT-004 (SKU format), with `ProductCreated`, `ProductPriceChanged`, and `ProductStatusChanged` domain events.
   The Application layer adds the use cases `CreateProductHandler` (BR-CAT-005, SKU uniqueness),
   `ChangeProductPriceHandler`, `ActivateProductHandler`, and `DiscontinueProductHandler`.
+- `Inventory` — `InventoryItem` aggregate (one per SKU: `OnHand`, `Reserved`, derived `Available`) and the append-only
+  `StockMovement` ledger entity, enforcing BR-INV-001 (stock level bounds), BR-INV-002 (adjustment constraints),
+  BR-INV-003 (append-only ledger, idempotent retries), BR-INV-004 (available stock), BR-INV-005/006 (reserve and
+  release within limits), and BR-INV-007 (SKU format), with `InventoryItemOpened`, `StockAdjusted`, `StockReserved`,
+  and `StockReleased` events. The Application layer adds `OpenInventoryItemHandler` (BR-INV-008),
+  `GetInventoryItemHandler`, and `AdjustStockHandler`; the three endpoints are wired and persisted in PostgreSQL (schema `inventory`).
 
 ## API
 
-Thirty-four versioned endpoints are mapped under `/api/v1` (plus the JWKS at `/.well-known/jwks.json`): one controller
+Thirty-five versioned endpoints are mapped under `/api/v1` (plus the JWKS at `/.well-known/jwks.json`): one controller
 per resource in each context's `API/Controllers`, request/response contracts in `API/Contracts`. Runnable examples
 for all of them, including the sign-in flow, are in `Portfolio.http`; the OpenAPI document and Scalar UI
 (development only) describe every operation.
@@ -164,7 +175,7 @@ for all of them, including the sign-in flow, are in `Portfolio.http`; the OpenAP
 | Checkout  | `POST /carts/{id}/checkout`, `GET /checkouts/{id}`                                                                                                                                                                                         |
 | Ordering  | `GET /orders`, `GET /orders/{id}`, `POST /orders/{id}/cancellation`                                                                                                                                                                        |
 | Billing   | `GET /payments/{id}`, `POST /payments/{id}/refunds`, `POST /payments/webhooks/{provider}`                                                                                                                                                  |
-| Inventory | `GET /inventory/items/{sku}`, `POST /inventory/items/{sku}/adjustments`                                                                                                                                                                    |
+| Inventory | `POST /inventory/items`, `GET /inventory/items/{sku}`, `POST /inventory/items/{sku}/adjustments`                                                                                                                                           |
 | Shipping  | `GET /orders/{id}/shipments`                                                                                                                                                                                                               |
 | Customers | `GET /customers/me`                                                                                                                                                                                                                        |
 | Platform  | `GET /diagnostics/runtime`                                                                                                                                                                                                                 |
@@ -173,9 +184,9 @@ Conventions already in place: cursor pagination (`limit`, `cursor`), `Idempotenc
 `If-Match` preconditions, camelCase JSON with string enums, money as decimal strings, RFC 9457 Problem Details, and
 default-deny authorization (`[AllowAnonymous]` is explicit).
 
-**Status:** authentication and account administration are implemented (next section). The business endpoints are
-mapped, validated, and protected, but their use cases are not wired yet, so every business operation answers `501`
-with Problem Details (`code: ENDPOINT_NOT_IMPLEMENTED`) once authorization passes.
+**Status:** authentication, account administration, and the Inventory endpoints are implemented. The other business
+endpoints are mapped, validated, and protected, but their use cases are not wired yet, so they answer `501` with
+Problem Details (`code: ENDPOINT_NOT_IMPLEMENTED`) once authorization passes.
 
 ## Authentication and authorization
 
@@ -232,9 +243,13 @@ local PostgreSQL or RabbitMQ. The `.env` account (`DEV_ACCOUNT_EMAIL`) is create
 
 ```bash
 bash scripts/init-secrets.sh prod --admin-email admin@example.com   # writes ./secrets/*
-cp .env.prod.example .env.prod                                      # API_IMAGE, API_ALLOWED_HOSTS, JWT_ISSUER
+cp .env.prod.example .env.prod                                      # API_IMAGE, MIGRATIONS_IMAGE, API_ALLOWED_HOSTS, JWT_ISSUER
 docker compose --env-file .env.prod -f docker-compose-prod.yml up -d
 ```
+
+Before the API starts, one-shot jobs provision the database roles and schemas, run one EF Core migrations bundle per
+bounded context as `app_migrator`, and grant the runtime role; the API then connects as `app_runtime`, which cannot
+change the schema (`docs/database.md`, "Deployment"). `MIGRATIONS_IMAGE` is built from the Dockerfile target `migrations`.
 
 `--env-file` keeps the development `.env` out of the production stack. TLS terminates at an external reverse proxy
 that forwards to the API port; it must never route `/health/*` or the observability backends to the internet. Only the
@@ -246,7 +261,7 @@ memory, and PID limits. The API healthcheck is the application itself (`dotnet P
 requests drain within 25 s, and Docker waits 35 s before killing the container.
 
 Known limitations: the application emits no OpenTelemetry yet (the pipeline is verified end to end with a synthetic
-OTLP record, including redaction), readiness has no PostgreSQL/Valkey/RabbitMQ checks until those integrations exist,
+OTLP record, including redaction), readiness checks PostgreSQL but not Valkey/RabbitMQ until those integrations exist,
 and ASP.NET Core Data Protection logs a warning about its in-memory key ring because nothing persists keys yet.
 
 ## Quality Gates
@@ -260,22 +275,25 @@ Defined by `ai/CODE.md §2` and enforced locally and in `.github/workflows/ci.ym
   `--locked-mode` in CI.
 - Tests live under `tests/`: `Portfolio.UnitTests` (domain and application, no infrastructure),
   `Portfolio.ArchitectureTests` (dependency flow, context boundaries, naming, visibility, explicit endpoint
-  authorization), and `Portfolio.IntegrationTests` (in-process HTTP pipeline, JWT validation, authorization matrix; Testcontainers join when PostgreSQL, Valkey, and RabbitMQ
-  infrastructure lands).
+  authorization, persistence rules), and `Portfolio.IntegrationTests` (in-process HTTP pipeline on a real PostgreSQL in a
+  Testcontainers container: migrations, constraints, concurrency, outbox/inbox, least-privilege roles, JWT validation,
+  authorization matrix; Valkey and RabbitMQ join when their infrastructure lands).
+- CI also checks that the migrations match the model (`dotnet ef migrations has-pending-model-changes`) and builds the
+  migrations bundles and image.
 
 ## Roadmap
 
 - [x] SharedKernel primitives (`Entity`, `AggregateRoot`, `Result`, `Money`, event abstractions)
 - [~] Domain aggregates per bounded context (Catalog `Product` done, with its application use cases; remaining contexts pending)
 - [x] Quality baseline (analyzers as errors, central packages, lock files, CI) and architecture fitness functions
-- [ ] EF Core mappings + versioned migrations
-- [ ] Transactional outbox + RabbitMQ integration events
+- [x] EF Core + PostgreSQL persistence for Identity, Catalog, and Inventory: schema and `DbContext` per context, versioned migrations and bundles, traceability, soft delete, concurrency tokens, least-privilege roles, outbox, relay, inbox (`docs/database.md`)
+- [ ] RabbitMQ publisher for the outbox relay and the first inbox consumer
 - [ ] Valkey caching with explicit TTL/invalidation
 - [ ] OpenTelemetry instrumentation in the application (the Collector/Prometheus/Loki/Tempo/Grafana stack is ready)
 - [x] API surface mapped (34 endpoints, contracts, OpenAPI, `Portfolio.http`)
 - [x] JWT authentication, refresh-token rotation, five access levels, and endpoint protection
 - [x] Dockerfile and Compose stacks (development and production) with pinned versions
-- [ ] Wire business endpoints to use cases; persistent Identity store (EF Core); MFA for staff; `Idempotency-Key` storage
+- [ ] Wire business endpoints to use cases; MFA for staff; `Idempotency-Key` storage
 
 ## License
 
