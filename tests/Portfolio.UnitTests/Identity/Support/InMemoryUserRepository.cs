@@ -1,12 +1,11 @@
 using System.Collections.Concurrent;
 using Portfolio.Identity.Domain;
 
-namespace Portfolio.Identity.Infrastructure;
+namespace Portfolio.UnitTests.Identity.Support;
 
 /// <summary>
-/// Temporary in-process store for accounts, registered as a singleton until the EF Core mapping,
-/// migrations, and the Identity schema exist (ai/TASKS.md, Database). Data is lost on restart and is not
-/// shared between instances; it is deliberately the only part of Identity that is not production-ready.
+/// In-process stand-in for the EF Core account repository, so handler tests run without a database
+/// (ai/TESTS.md section 3.1). Honours the active-accounts-only contract and the unique e-mail.
 /// </summary>
 internal sealed class InMemoryUserRepository : IUserRepository
 {
