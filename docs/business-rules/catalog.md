@@ -10,13 +10,13 @@ error code, and is covered by unit tests tagged `[Trait("Rule", "BR-CAT-xxx")]`.
 
 ## Summary
 
-| ID         | Name                                      | Classification   | Criticality | Enforced in                                                |
-| ---------- | ----------------------------------------- | ---------------- | ----------- | ---------------------------------------------------------- |
-| BR-CAT-001 | Product Naming and Description Constraint | Constraint       | Standard    | `Product`                                                  |
-| BR-CAT-002 | Positive Sell Price Constraint            | Constraint       | Financial   | `Product`, `Money`                                         |
-| BR-CAT-003 | Product Lifecycle State Transition        | State Transition | Standard    | `Product`                                                  |
-| BR-CAT-004 | SKU Format Constraint                     | Constraint       | Standard    | `Sku`                                                      |
-| BR-CAT-005 | SKU Uniqueness Constraint                 | Invariant        | Standard    | `CreateProductHandler` + DB partial unique index (pending) |
+| ID         | Name                                      | Classification   | Criticality | Enforced in                                      |
+| ---------- | ----------------------------------------- | ---------------- | ----------- | ------------------------------------------------ |
+| BR-CAT-001 | Product Naming and Description Constraint | Constraint       | Standard    | `Product`                                        |
+| BR-CAT-002 | Positive Sell Price Constraint            | Constraint       | Financial   | `Product`, `Money`                               |
+| BR-CAT-003 | Product Lifecycle State Transition        | State Transition | Standard    | `Product`                                        |
+| BR-CAT-004 | SKU Format Constraint                     | Constraint       | Standard    | `Sku`                                            |
+| BR-CAT-005 | SKU Uniqueness Constraint                 | Invariant        | Standard    | `CreateProductHandler` + DB partial unique index |
 
 Common attributes for all rules: **Owner** — to be assigned; **Source** — Initial domain model;
 **Effective date** — 2026-09-30 (date this catalog was written; BR-CAT-001…003 are implemented since commit `d5c41f1`,
@@ -68,13 +68,13 @@ Draft ──Activate──▶ Active ──Discontinue──▶ Discontinued
 
 ## BR-CAT-005 — SKU Uniqueness Constraint
 
-| Attribute      | Value                                                                                                                                                                                                                                                                                                 |
-| -------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Description    | At most one active (not logically deleted) product uses a given SKU.                                                                                                                                                                                                                                  |
-| Preconditions  | Creating a product.                                                                                                                                                                                                                                                                                   |
-| Postconditions | The product is persisted with a SKU no other active product has.                                                                                                                                                                                                                                      |
-| Error behavior | `Conflict` failure `PRODUCT_SKU_ALREADY_EXISTS`. The handler check covers sequential requests and retries; concurrent requests are closed by a partial unique index (`UNIQUE (sku) WHERE deleted_at IS NULL`, `ai/DATABASE.md §3.2`) that the Infrastructure layer must add with the EF Core mapping. |
-| Implemented in | `CreateProductHandler` (check), persistence mapping (pending)                                                                                                                                                                                                                                         |
+| Attribute      | Value                                                                                                                                                                                                                                                                                                                                                  |
+| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Description    | At most one active (not logically deleted) product uses a given SKU.                                                                                                                                                                                                                                                                                   |
+| Preconditions  | Creating a product.                                                                                                                                                                                                                                                                                                                                    |
+| Postconditions | The product is persisted with a SKU no other active product has.                                                                                                                                                                                                                                                                                       |
+| Error behavior | `Conflict` failure `PRODUCT_SKU_ALREADY_EXISTS`. The handler check covers sequential requests and retries; concurrent requests are closed by a partial unique index (`UNIQUE (sku) WHERE deleted_at IS NULL`, `ai/DATABASE.md §3.2`) `catalog.ux_products_sku_active`, created by the first migration; a lost race surfaces as `409 DUPLICATE_RECORD`. |
+| Implemented in | `CreateProductHandler` (check), `ProductConfiguration` (index)                                                                                                                                                                                                                                                                                         |
 
 ## Open questions for the business owner
 
