@@ -1,7 +1,7 @@
 namespace Portfolio.Shipping.API.Contracts;
 
 /// <summary>Status of a shipment. An open set: clients must tolerate new values.</summary>
-public enum ShipmentStatusContract
+internal enum ShipmentStatusContract
 {
     /// <summary>Being prepared.</summary>
     Preparing,
@@ -23,7 +23,7 @@ public enum ShipmentStatusContract
 /// <param name="Carrier">Carrier name, omitted until one is assigned.</param>
 /// <param name="TrackingCode">Carrier tracking code, omitted until available.</param>
 /// <param name="EstimatedDeliveryDate">Estimated delivery as a calendar date (<c>YYYY-MM-DD</c>).</param>
-public sealed record ShipmentResponse(
+internal sealed record ShipmentResponse(
     Guid Id,
     Guid OrderId,
     ShipmentStatusContract Status,
