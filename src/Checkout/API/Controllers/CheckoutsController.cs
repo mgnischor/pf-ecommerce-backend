@@ -3,15 +3,16 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Portfolio.Checkout.API.Contracts;
 using Portfolio.SharedKernel.API;
+using Portfolio.SharedKernel.API.Authorization;
 
 namespace Portfolio.Checkout.API.Controllers;
 
 /// <summary>Conversion of a cart into a confirmed purchase intent.</summary>
 [Route("api/v1")]
-[Authorize(Roles = ApiRoles.Customer)]
+[Authorize(Policy = AccessPolicies.Authenticated)]
 [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized, "application/problem+json")]
 [ProducesResponseType<ProblemDetails>(StatusCodes.Status403Forbidden, "application/problem+json")]
-public sealed class CheckoutsController : ApiControllerBase
+internal sealed class CheckoutsController : ApiControllerBase
 {
     /// <summary>
     /// Starts the checkout of a cart (reserve stock, authorize payment, place the order). Asynchronous:
