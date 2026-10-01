@@ -1,6 +1,10 @@
 using System.Reflection;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.Routing;
 using NetArchTest.Rules;
 using Portfolio.SharedKernel.API;
+using Portfolio.SharedKernel.API.Authorization;
 using Portfolio.SharedKernel.Domain;
 
 namespace Portfolio.ArchitectureTests;
@@ -46,13 +50,13 @@ public sealed class ConventionTests
     [Fact]
     public void Handlers_should_be_sealed_classes_in_the_application_layer()
     {
-        // Infrastructure may define framework handlers (for example authentication handlers); the rule is about use cases.
+        // Infrastructure and API may define framework handlers (authorization or authentication handlers); the rule is about use cases.
         var handlers = Types
             .InAssembly(App)
             .That()
             .HaveNameEndingWith("Handler", StringComparison.Ordinal)
             .And()
-            .DoNotResideInNamespaceMatching(@"\.Infrastructure(\.|$)");
+            .DoNotResideInNamespaceMatching(@"\.(Infrastructure|API)(\.|$)");
 
         var sealedResult = handlers.Should().BeSealed().GetResult();
         var layerResult = handlers
@@ -81,14 +85,12 @@ public sealed class ConventionTests
     }
 
     [Fact]
-    public void Types_outside_the_api_layer_should_be_internal_unless_they_are_a_documented_public_contract()
+    public void Types_should_be_internal_unless_they_are_a_documented_public_contract()
     {
         var result = Types
             .InAssembly(App)
             .That()
             .ResideInNamespaceMatching(@"^Portfolio\.")
-            .And()
-            .DoNotResideInNamespaceMatching(@"\.API(\.|$)") // MVC only discovers public controllers; contracts are their signatures.
             .And()
             .DoNotHaveName(nameof(DomainException)) // Sonar S3871 requires exceptions to be public.
             .Should()
@@ -144,6 +146,79 @@ public sealed class ConventionTests
 
         result.IsSuccessful.ShouldBeTrue(Describe(result));
     }
+
+    [Fact]
+    public void Every_endpoint_should_declare_its_authorization_explicitly()
+    {
+        // Guards the rule itself: a scan that finds no endpoints would pass vacuously.
+        Endpoints().Count().ShouldBeGreaterThan(30);
+
+        var undeclared = Endpoints()
+            .Where(endpoint =>
+                !HasAuthorizationMetadata(endpoint.Controller) && !HasAuthorizationMetadata(endpoint.Action)
+            )
+            .Select(endpoint => $"{endpoint.Controller.Name}.{endpoint.Action.Name}")
+            .ToArray();
+
+        undeclared.ShouldBeEmpty(
+            "Every action needs [Authorize(Policy = ...)] or an explicit [AllowAnonymous]; the fallback policy is a safety net, not a declaration."
+        );
+    }
+
+    [Fact]
+    public void Authorization_should_use_the_access_level_policies_and_never_roles()
+    {
+        var known = typeof(AccessPolicies)
+            .GetFields(BindingFlags.Public | BindingFlags.Static)
+            .Select(field => (string?)field.GetRawConstantValue())
+            .ToHashSet(StringComparer.Ordinal);
+
+        var offenders = Endpoints()
+            .SelectMany(endpoint =>
+                endpoint
+                    .Controller.GetCustomAttributes<AuthorizeAttribute>(inherit: true)
+                    .Concat(endpoint.Action.GetCustomAttributes<AuthorizeAttribute>(inherit: true))
+                    .Where(attribute =>
+                        !string.IsNullOrEmpty(attribute.Roles)
+                        || attribute.Policy is null
+                        || !known.Contains(attribute.Policy)
+                    )
+                    .Select(_ => $"{endpoint.Controller.Name}.{endpoint.Action.Name}")
+            )
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+
+        offenders.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public void Access_levels_should_be_the_five_documented_levels_in_ascending_order()
+    {
+        Enum.GetNames<AccessLevel>().ShouldBe(["Public", "Collaborator", "Manager", "Administrator", "Developer"]);
+        Enum.GetValues<AccessLevel>().Select(level => (int)level).ShouldBe([0, 1, 2, 3, 4]);
+    }
+
+    [Fact]
+    public void Every_access_level_should_have_a_policy_except_public_which_is_anonymous_access()
+    {
+        typeof(AccessPolicies)
+            .GetFields(BindingFlags.Public | BindingFlags.Static)
+            .Select(field => field.Name)
+            .ShouldBe(["Authenticated", "Collaborator", "Manager", "Administrator", "Developer"]);
+    }
+
+    private static IEnumerable<(Type Controller, MethodInfo Action)> Endpoints() =>
+        App.GetTypes()
+            .Where(type => type.IsClass && !type.IsAbstract && typeof(ControllerBase).IsAssignableFrom(type))
+            .SelectMany(controller =>
+                controller
+                    .GetMethods(BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly)
+                    .Where(action => action.GetCustomAttributes<HttpMethodAttribute>(inherit: true).Any())
+                    .Select(action => (controller, action))
+            );
+
+    private static bool HasAuthorizationMetadata(MemberInfo member) =>
+        member.GetCustomAttributes(inherit: true).Any(attribute => attribute is IAuthorizeData or IAllowAnonymous);
 
     private static string Describe(NetArchTest.Rules.TestResult result) =>
         "Violating types: " + string.Join(", ", result.FailingTypeNames ?? []);
