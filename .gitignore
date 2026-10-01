@@ -169,3 +169,17 @@ override.tf.json
 *.auto.tfvars.json
 backend.*.hcl
 !backend.hcl.example
+
+#--------------------------------------------------------------------------------------------------
+# Secrets (ai/SECURITY.md §5.3): never commit keys, credentials, or local overrides
+#--------------------------------------------------------------------------------------------------
+.env
+.env.*
+!.env.example
+secrets/
+*.pem
+*.key
+*.pfx
+*.p12
+appsettings.*.local.json
+*.user
