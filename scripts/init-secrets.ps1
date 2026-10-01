@@ -40,14 +40,20 @@ if (-not $AdminEmail) { throw 'prod needs -AdminEmail <address> for the first ad
 
 New-Item -ItemType Directory -Force -Path secrets | Out-Null
 $pg = New-RandomHex; $valkey = New-RandomHex; $rabbit = New-RandomHex
+$migrator = New-RandomHex; $runtime = New-RandomHex; $reporting = New-RandomHex
 Write-Secret 'postgres_password.txt' $pg
+# Least privilege (ai/DATABASE.md §3.2): the migration job and the API never use the bootstrap role.
+Write-Secret 'postgres_migrator_password.txt' $migrator
+Write-Secret 'postgres_runtime_password.txt' $runtime
+Write-Secret 'postgres_readonly_password.txt' $reporting
 Write-Secret 'valkey_password.txt' $valkey
 Write-Secret 'rabbitmq_credentials.conf' "default_user = app`ndefault_pass = $rabbit"
 Write-Secret 'grafana_admin_password.txt' (New-RandomHex)
 Write-Secret 'identity_token_hash_key.txt' ([Convert]::ToBase64String([System.Security.Cryptography.RandomNumberGenerator]::GetBytes(64)))
 Write-Secret 'bootstrap_admin_email.txt' $AdminEmail
 Write-Secret 'bootstrap_admin_password.txt' (New-RandomHex 16)
-Write-Secret 'conn_postgres.txt' "Host=postgres;Port=5432;Database=ecommerce;Username=app;Password=$pg"
+Write-Secret 'conn_postgres.txt' "Host=postgres;Port=5432;Database=ecommerce;Username=app_runtime;Password=$runtime"
+Write-Secret 'conn_postgres_migrator.txt' "Host=postgres;Port=5432;Database=ecommerce;Username=app_migrator;Password=$migrator"
 Write-Secret 'conn_valkey.txt' "valkey:6379,password=$valkey"
 Write-Secret 'conn_rabbitmq.txt' "amqp://app:$rabbit@rabbitmq:5672"
 
