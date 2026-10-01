@@ -18,6 +18,14 @@ public sealed class RuleCoverageTests
     [InlineData(@"^Portfolio\.Catalog\.Application(\.|$)")]
     [InlineData(@"^Portfolio\.Catalog\.API\.Controllers$")]
     [InlineData(@"^Portfolio\.Catalog\.API\.Contracts$")]
+    [InlineData(@"^Portfolio\.Inventory\.Domain(\.|$)")]
+    [InlineData(@"^Portfolio\.Inventory\.Application(\.|$)")]
+    [InlineData(@"^Portfolio\.Inventory\.Infrastructure(\.|$)")]
+    [InlineData(@"^Portfolio\.Catalog\.Infrastructure(\.|$)")]
+    [InlineData(@"^Portfolio\.Identity\.Infrastructure(\.|$)")]
+    [InlineData(@"^Portfolio\.SharedKernel\.Infrastructure(\.|$)")]
+    [InlineData(@"^Portfolio\.Inventory\.API\.Controllers$")]
+    [InlineData(@"^Portfolio\.Inventory\.API\.Contracts$")]
     [InlineData(@"^Portfolio\.SharedKernel\.API(\.|$)")]
     public void Namespace_patterns_used_by_the_rules_should_select_existing_types(string pattern)
     {
