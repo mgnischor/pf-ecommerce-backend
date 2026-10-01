@@ -4,7 +4,7 @@ using Portfolio.SharedKernel.API.Contracts;
 namespace Portfolio.Catalog.API.Contracts;
 
 /// <summary>Lifecycle status of a product. An open set: clients must tolerate new values.</summary>
-public enum ProductStatusContract
+internal enum ProductStatusContract
 {
     /// <summary>Created but not yet sellable.</summary>
     Draft,
@@ -21,7 +21,7 @@ public enum ProductStatusContract
 /// <param name="Sku">Stock-keeping unit, unique among active products (BR-CAT-005).</param>
 /// <param name="Price">Sell price; must be greater than zero.</param>
 /// <param name="Description">Optional description, up to 2000 characters.</param>
-public sealed record CreateProductRequest(
+internal sealed record CreateProductRequest(
     [Required, StringLength(200, MinimumLength = 3)] string Name,
     [
         Required,
@@ -38,14 +38,14 @@ public sealed record CreateProductRequest(
 /// </summary>
 /// <param name="Name">New display name, 3–200 characters.</param>
 /// <param name="Description">New description, up to 2000 characters; <c>null</c> clears it.</param>
-public sealed record UpdateProductRequest(
+internal sealed record UpdateProductRequest(
     [StringLength(200, MinimumLength = 3)] string? Name = null,
     [StringLength(2000)] string? Description = null
 );
 
 /// <summary>Request to change the sell price (BR-CAT-002).</summary>
 /// <param name="Price">New price; must be greater than zero.</param>
-public sealed record ChangeProductPriceRequest([Required] MoneyRequest Price);
+internal sealed record ChangeProductPriceRequest([Required] MoneyRequest Price);
 
 /// <summary>Product as seen in a collection.</summary>
 /// <param name="Id">Product identifier.</param>
@@ -53,7 +53,7 @@ public sealed record ChangeProductPriceRequest([Required] MoneyRequest Price);
 /// <param name="Sku">Stock-keeping unit.</param>
 /// <param name="Price">Current sell price.</param>
 /// <param name="Status">Lifecycle status.</param>
-public sealed record ProductSummaryResponse(
+internal sealed record ProductSummaryResponse(
     Guid Id,
     string Name,
     string Sku,
@@ -72,7 +72,7 @@ public sealed record ProductSummaryResponse(
 /// <param name="AllowedActions">Actions the lifecycle currently allows, such as <c>activate</c>.</param>
 /// <param name="CreatedAt">UTC creation instant.</param>
 /// <param name="UpdatedAt">UTC instant of the last change.</param>
-public sealed record ProductResponse(
+internal sealed record ProductResponse(
     Guid Id,
     string Name,
     string? Description,
