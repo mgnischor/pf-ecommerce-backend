@@ -17,12 +17,20 @@ public sealed partial class ContainerConventionTests
     [Fact]
     public void Dockerfile_should_pin_every_base_image_to_tag_and_digest()
     {
-        var froms = FromLine().Matches(Read("Dockerfile")).Select(match => match.Groups["image"].Value).ToArray();
+        var dockerfile = Read("Dockerfile");
+        var froms = FromLine().Matches(dockerfile).Select(match => match.Groups["image"].Value).ToArray();
+        // A stage built on an earlier stage (FROM build AS bundles) inherits that stage's pinned base.
+        var stages = StageName()
+            .Matches(dockerfile)
+            .Select(match => match.Groups["stage"].Value)
+            .ToHashSet(StringComparer.Ordinal);
 
         froms.ShouldNotBeEmpty();
-        froms.ShouldAllBe(image =>
-            DigestPinned().IsMatch(image) && !image.Contains(":latest", StringComparison.Ordinal)
-        );
+        froms
+            .Where(image => !stages.Contains(image))
+            .ShouldAllBe(image =>
+                DigestPinned().IsMatch(image) && !image.Contains(":latest", StringComparison.Ordinal)
+            );
     }
 
     [Fact]
@@ -182,6 +190,9 @@ public sealed partial class ContainerConventionTests
 
     [GeneratedRegex(@"(?m)^FROM\s+(?<image>\S+)", RegexOptions.None, matchTimeoutMilliseconds: 1000)]
     private static partial Regex FromLine();
+
+    [GeneratedRegex(@"(?m)^FROM\s+\S+\s+AS\s+(?<stage>\S+)", RegexOptions.None, matchTimeoutMilliseconds: 1000)]
+    private static partial Regex StageName();
 
     [GeneratedRegex(@"(?m)^\s+image:\s*(?<image>\S+)\s*$", RegexOptions.None, matchTimeoutMilliseconds: 1000)]
     private static partial Regex ImageLine();
