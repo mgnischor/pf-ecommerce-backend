@@ -1,0 +1,225 @@
+# Local development and integration testing (ai/CONTAINERS.md §5).
+#
+#   cp .env.example .env        # then edit, or: bash scripts/init-secrets.sh dev
+#   docker compose -f docker-compose-dev.yml up --build
+#
+# Convenience is allowed here (ports published on 127.0.0.1 only, credentials from an untracked .env), but the
+# security context, health checks, and resource limits are the same as production. Image versions and digests
+# match docker-compose-prod.yml; Renovate/Dependabot update the tag and the digest together.
+name: pf-ecommerce-dev
+
+services:
+    ecommerce-api:
+        build:
+            context: .
+            dockerfile: Dockerfile
+            target: runtime
+            args:
+                VERSION: 0.0.0-dev
+        image: pf-ecommerce-api:dev
+        ports:
+            - "127.0.0.1:${API_PORT:-8080}:8080"
+        environment:
+            ASPNETCORE_ENVIRONMENT: Development
+            # Same variable names as production (ai/CONTAINERS.md §5, "parity with production").
+            ConnectionStrings__Postgres: "Host=postgres;Port=5432;Database=ecommerce;Username=app;Password=${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}"
+            ConnectionStrings__Valkey: "valkey:6379,password=${VALKEY_PASSWORD:?set VALKEY_PASSWORD in .env}"
+            ConnectionStrings__RabbitMQ: "amqp://app:${RABBITMQ_PASSWORD:?set RABBITMQ_PASSWORD in .env}@rabbitmq:5672"
+            # Development generates throw-away JWT keys; tokens stop validating when the container restarts.
+            Identity__Bootstrap__Accounts__0__Email: "${DEV_ACCOUNT_EMAIL:?set DEV_ACCOUNT_EMAIL in .env}"
+            Identity__Bootstrap__Accounts__0__Password: "${DEV_ACCOUNT_PASSWORD:?set DEV_ACCOUNT_PASSWORD in .env}"
+            Identity__Bootstrap__Accounts__0__AccessLevel: developer
+            # Same OTEL_* variables as production; only the endpoint and the sampler differ locally.
+            OTEL_SERVICE_NAME: ecommerce-api
+            OTEL_RESOURCE_ATTRIBUTES: "deployment.environment.name=development,service.version=0.0.0-dev"
+            OTEL_EXPORTER_OTLP_ENDPOINT: "http://otel-lgtm:4317"
+            OTEL_TRACES_SAMPLER: always_on
+        read_only: true
+        tmpfs:
+            - /tmp:size=64m,mode=1777
+        cap_drop: [ALL]
+        security_opt:
+            - no-new-privileges:true
+        pids_limit: 256
+        healthcheck:
+            # App-provided probe mode: the chiseled runtime image ships no shell, curl, or wget.
+            test: ["CMD", "dotnet", "Portfolio.dll", "--health-check"]
+            interval: 15s
+            timeout: 5s
+            retries: 3
+            start_period: 15s
+        deploy:
+            resources:
+                limits:
+                    cpus: "1.0"
+                    memory: 512M
+        stop_grace_period: 35s
+        depends_on:
+            postgres:
+                condition: service_healthy
+            valkey:
+                condition: service_healthy
+            rabbitmq:
+                condition: service_healthy
+            otel-lgtm:
+                condition: service_healthy
+        networks:
+            - backend
+        logging: &logging
+            driver: json-file
+            options:
+                max-size: "10m"
+                max-file: "3"
+
+    postgres:
+        image: postgres:18.6-alpine3.24@sha256:77f585114c32fbca283dc835b0596f4e52b51b4c6662d7810b2f4084f60a1873
+        user: "70:70"
+        environment:
+            POSTGRES_DB: ecommerce
+            POSTGRES_USER: app
+            POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}"
+        ports:
+            - "127.0.0.1:5432:5432"
+        volumes:
+            - pgdata:/var/lib/postgresql
+        read_only: true
+        tmpfs:
+            - /tmp:size=64m,mode=1777
+            - /run/postgresql:size=8m,uid=70,gid=70
+        cap_drop: [ALL]
+        security_opt:
+            - no-new-privileges:true
+        pids_limit: 256
+        healthcheck:
+            test: ["CMD-SHELL", "pg_isready -U app -d ecommerce"]
+            interval: 10s
+            timeout: 5s
+            retries: 5
+            start_period: 10s
+        deploy:
+            resources:
+                limits:
+                    cpus: "1.0"
+                    memory: 512M
+        stop_grace_period: 30s
+        networks:
+            - backend
+        logging: *logging
+
+    valkey:
+        image: valkey/valkey:9.1.2-alpine3.24@sha256:48332870af354a799964c0012ae1194a0bf2bf894eb508f945810596dc2d8d11
+        user: "999:1000"
+        # A cache, not a source of truth (ai/DATABASE.md §4): no persistence, bounded memory, LRU eviction.
+        command:
+            - valkey-server
+            - --requirepass
+            - "${VALKEY_PASSWORD:?set VALKEY_PASSWORD in .env}"
+            - --save
+            - ""
+            - --appendonly
+            - "no"
+            - --maxmemory
+            - 96mb
+            - --maxmemory-policy
+            - allkeys-lru
+        environment:
+            REDISCLI_AUTH: "${VALKEY_PASSWORD}"
+        ports:
+            - "127.0.0.1:6379:6379"
+        volumes:
+            - valkeydata:/data
+        read_only: true
+        tmpfs:
+            - /tmp:size=16m,mode=1777
+        cap_drop: [ALL]
+        security_opt:
+            - no-new-privileges:true
+        pids_limit: 128
+        healthcheck:
+            test: ["CMD-SHELL", "valkey-cli ping | grep -q PONG"]
+            interval: 10s
+            timeout: 5s
+            retries: 5
+        deploy:
+            resources:
+                limits:
+                    cpus: "0.5"
+                    memory: 160M
+        networks:
+            - backend
+        logging: *logging
+
+    rabbitmq:
+        image: rabbitmq:4.3.6-management-alpine@sha256:95312f53d5b1115d410f1a56fba03a6325e3e03b4c60a845237bd345f341a097
+        user: "100:101"
+        hostname: rabbitmq
+        environment:
+            RABBITMQ_DEFAULT_USER: app
+            RABBITMQ_DEFAULT_PASS: "${RABBITMQ_PASSWORD:?set RABBITMQ_PASSWORD in .env}"
+        ports:
+            - "127.0.0.1:5672:5672"
+            - "127.0.0.1:15672:15672" # management UI, development only
+        volumes:
+            - rabbitmqdata:/var/lib/rabbitmq
+        read_only: true
+        tmpfs:
+            - /tmp:size=32m,mode=1777
+            - /etc/rabbitmq/conf.d:size=1m,uid=100,gid=101
+        cap_drop: [ALL]
+        security_opt:
+            - no-new-privileges:true
+        pids_limit: 512
+        healthcheck:
+            test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+            interval: 15s
+            timeout: 10s
+            retries: 5
+            start_period: 30s
+        deploy:
+            resources:
+                limits:
+                    cpus: "1.0"
+                    memory: 512M
+        stop_grace_period: 30s
+        networks:
+            - backend
+        logging: *logging
+
+    # All-in-one local telemetry backend: OpenTelemetry Collector, Prometheus, Loki, Tempo, and Grafana in one
+    # container (ai/OBSERVABILITY.md §18). Local development and CI only; never deployed.
+    otel-lgtm:
+        image: grafana/otel-lgtm:0.34.0@sha256:b966ea107831d526d9eb8fe4d2d86c9e5731392fad9dce8296bcf2072031f07c
+        ports:
+            - "127.0.0.1:3000:3000" # Grafana
+            - "127.0.0.1:4317:4317" # OTLP gRPC
+            - "127.0.0.1:4318:4318" # OTLP HTTP
+        volumes:
+            - lgtmdata:/data
+        cap_drop: [ALL]
+        security_opt:
+            - no-new-privileges:true
+        pids_limit: 1024
+        healthcheck:
+            test: ["CMD", "/otel-lgtm/otelcol-contrib/otelcol-contrib", "--version"]
+            interval: 15s
+            timeout: 5s
+            retries: 10
+            start_period: 60s
+        deploy:
+            resources:
+                limits:
+                    cpus: "2.0"
+                    memory: 2G
+        networks:
+            - backend
+        logging: *logging
+
+volumes:
+    pgdata:
+    valkeydata:
+    rabbitmqdata:
+    lgtmdata:
+
+networks:
+    backend:
+        driver: bridge
