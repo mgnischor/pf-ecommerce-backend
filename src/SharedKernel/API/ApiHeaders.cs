@@ -1,7 +1,7 @@
 namespace Portfolio.SharedKernel.API;
 
 /// <summary>Names of the request headers that are part of the API contract (ai/API_CONTRACTS.md §3 and §11).</summary>
-public static class ApiHeaders
+internal static class ApiHeaders
 {
     /// <summary>Client-generated key that makes a retried unsafe request idempotent.</summary>
     public const string IdempotencyKey = "Idempotency-Key";
