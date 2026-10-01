@@ -21,6 +21,9 @@ services:
             - "127.0.0.1:${API_PORT:-8080}:8080"
         environment:
             ASPNETCORE_ENVIRONMENT: Development
+            # Local development only: apply the migrations when the API starts (ai/DATABASE.md §6.1). Everywhere else
+            # a migrations bundle does it, and the setting is ignored outside the Development environment.
+            Database__MigrateOnStartup: "true"
             # Same variable names as production (ai/CONTAINERS.md §5, "parity with production").
             ConnectionStrings__Postgres: "Host=postgres;Port=5432;Database=ecommerce;Username=app;Password=${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}"
             ConnectionStrings__Valkey: "valkey:6379,password=${VALKEY_PASSWORD:?set VALKEY_PASSWORD in .env}"
