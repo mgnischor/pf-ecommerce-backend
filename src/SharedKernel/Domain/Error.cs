@@ -47,6 +47,17 @@ internal sealed record Error(
         IReadOnlyDictionary<string, object>? parameters = null
     ) => new(ErrorType.Conflict, code, RuleId: ruleId, Parameters: parameters);
 
+    /// <summary>Creates an authentication failure. Keep the code generic so it never reveals which check failed.</summary>
+    /// <param name="code">Stable error code.</param>
+    /// <param name="ruleId">Violated business rule identifier.</param>
+    public static Error Unauthorized(string code, string? ruleId = null) =>
+        new(ErrorType.Unauthorized, code, RuleId: ruleId);
+
+    /// <summary>Creates an authorization failure for an authenticated caller.</summary>
+    /// <param name="code">Stable error code.</param>
+    /// <param name="ruleId">Violated business rule identifier.</param>
+    public static Error Forbidden(string code, string? ruleId = null) => new(ErrorType.Forbidden, code, RuleId: ruleId);
+
     /// <summary>Value equality, including the message parameters (dictionaries compare by content).</summary>
     /// <param name="other">Error to compare with.</param>
     public bool Equals(Error? other) =>
