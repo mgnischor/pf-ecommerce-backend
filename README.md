@@ -151,29 +151,48 @@ Implemented so far (see `ai/TASKS.md` for full progress). Types are `internal` b
 
 ## API
 
-Twenty-five versioned endpoints are mapped under `/api/v1` (one controller per resource in each context's
-`API/Controllers`, request/response contracts in `API/Contracts`). Runnable examples for all of them are in
-`Portfolio.http`; the OpenAPI document and Scalar UI (development only) describe every operation.
+Thirty-four versioned endpoints are mapped under `/api/v1` (plus the JWKS at `/.well-known/jwks.json`): one controller
+per resource in each context's `API/Controllers`, request/response contracts in `API/Contracts`. Runnable examples
+for all of them, including the sign-in flow, are in `Portfolio.http`; the OpenAPI document and Scalar UI
+(development only) describe every operation.
 
-| Context   | Endpoints                                                                                                                                                                                                     |
-| --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Identity  | `POST /auth/tokens`                                                                                                                                                                                           |
-| Catalog   | `GET /products`, `GET /products/{id}`, `POST /products`, `PATCH /products/{id}`, `PUT /products/{id}/price`, `POST /products/{id}/activation`, `POST /products/{id}/discontinuation`, `DELETE /products/{id}` |
-| Cart      | `POST /carts`, `GET /carts/{id}`, `POST /carts/{id}/items`, `DELETE /carts/{id}/items/{itemId}`                                                                                                               |
-| Checkout  | `POST /carts/{id}/checkout`, `GET /checkouts/{id}`                                                                                                                                                            |
-| Ordering  | `GET /orders`, `GET /orders/{id}`, `POST /orders/{id}/cancellation`                                                                                                                                           |
-| Billing   | `GET /payments/{id}`, `POST /payments/{id}/refunds`, `POST /payments/webhooks/{provider}`                                                                                                                     |
-| Inventory | `GET /inventory/items/{sku}`, `POST /inventory/items/{sku}/adjustments`                                                                                                                                       |
-| Shipping  | `GET /orders/{id}/shipments`                                                                                                                                                                                  |
-| Customers | `GET /customers/me`                                                                                                                                                                                           |
+| Context   | Endpoints                                                                                                                                                                                                                                  |
+| --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Identity  | `POST /auth/tokens`, `POST /auth/tokens/refresh`, `POST /auth/tokens/revocation`, `POST /auth/registrations`, `GET /auth/me`, `POST /users`, `PUT /users/{id}/access-level`, `POST /users/{id}/deactivation`, `GET /.well-known/jwks.json` |
+| Catalog   | `GET /products`, `GET /products/{id}`, `POST /products`, `PATCH /products/{id}`, `PUT /products/{id}/price`, `POST /products/{id}/activation`, `POST /products/{id}/discontinuation`, `DELETE /products/{id}`                              |
+| Cart      | `POST /carts`, `GET /carts/{id}`, `POST /carts/{id}/items`, `DELETE /carts/{id}/items/{itemId}`                                                                                                                                            |
+| Checkout  | `POST /carts/{id}/checkout`, `GET /checkouts/{id}`                                                                                                                                                                                         |
+| Ordering  | `GET /orders`, `GET /orders/{id}`, `POST /orders/{id}/cancellation`                                                                                                                                                                        |
+| Billing   | `GET /payments/{id}`, `POST /payments/{id}/refunds`, `POST /payments/webhooks/{provider}`                                                                                                                                                  |
+| Inventory | `GET /inventory/items/{sku}`, `POST /inventory/items/{sku}/adjustments`                                                                                                                                                                    |
+| Shipping  | `GET /orders/{id}/shipments`                                                                                                                                                                                                               |
+| Customers | `GET /customers/me`                                                                                                                                                                                                                        |
+| Platform  | `GET /diagnostics/runtime`                                                                                                                                                                                                                 |
 
 Conventions already in place: cursor pagination (`limit`, `cursor`), `Idempotency-Key` on retried unsafe requests,
 `If-Match` preconditions, camelCase JSON with string enums, money as decimal strings, RFC 9457 Problem Details, and
 default-deny authorization (`[AllowAnonymous]` is explicit).
 
-**Status:** the endpoints are mapped and validated but their use cases are not wired yet, so every operation answers
-`501` with Problem Details (`code: ENDPOINT_NOT_IMPLEMENTED`). Protected operations answer `401` until JWT
-validation replaces the placeholder authentication scheme in `src/Identity`.
+**Status:** authentication and account administration are implemented (next section). The business endpoints are
+mapped, validated, and protected, but their use cases are not wired yet, so every business operation answers `501`
+with Problem Details (`code: ENDPOINT_NOT_IMPLEMENTED`) once authorization passes.
+
+## Authentication and authorization
+
+JWT bearer authentication with short-lived ES384 access tokens and rotating refresh tokens, and five hierarchical
+access levels: **public**, **collaborator**, **manager**, **administrator**, **developer**. Every endpoint either is
+explicitly anonymous or names the minimum level it needs; an architecture test fails the build otherwise, and an
+integration test calls every protected endpoint as anonymous and as each level. The full rules, the endpoint matrix,
+the token specification, and how to operate the secrets are in `docs/business-rules/identity.md`.
+
+| Setting (secret)                                                           | Description                                                                               |
+| -------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| `Jwt__ActiveKeyId`, `Jwt__Keys__0__Id`, `Jwt__Keys__0__PrivateKeyPem`      | ES384 signing key (PKCS#8 PEM). Use `…__PrivateKeyPemFile` for a mounted file             |
+| `Identity__TokenHashKey`                                                   | Base64 key of at least 32 random bytes; refresh tokens are stored only as HMAC-SHA3-512   |
+| `Identity__Bootstrap__Accounts__0__Email`, `…__Password`, `…__AccessLevel` | Accounts created at startup when missing: how the first administrator and developer exist |
+
+Outside `Development` the host refuses to start without the signing key and the token-hash key. In `Development` it
+generates throw-away keys, so `dotnet run` works, but tokens stop validating on restart.
 
 ## Quality Gates
 
@@ -185,8 +204,8 @@ Defined by `ai/CODE.md §2` and enforced locally and in `.github/workflows/ci.ym
 - `Directory.Packages.props` centralizes package versions; `packages.lock.json` files are committed and restored with
   `--locked-mode` in CI.
 - Tests live under `tests/`: `Portfolio.UnitTests` (domain and application, no infrastructure),
-  `Portfolio.ArchitectureTests` (dependency flow, context boundaries, naming, visibility), and
-  `Portfolio.IntegrationTests` (in-process HTTP pipeline; Testcontainers join when PostgreSQL, Valkey, and RabbitMQ
+  `Portfolio.ArchitectureTests` (dependency flow, context boundaries, naming, visibility, explicit endpoint
+  authorization), and `Portfolio.IntegrationTests` (in-process HTTP pipeline, JWT validation, authorization matrix; Testcontainers join when PostgreSQL, Valkey, and RabbitMQ
   infrastructure lands).
 
 ## Roadmap
@@ -198,8 +217,9 @@ Defined by `ai/CODE.md §2` and enforced locally and in `.github/workflows/ci.ym
 - [ ] Transactional outbox + RabbitMQ integration events
 - [ ] Valkey caching with explicit TTL/invalidation
 - [ ] OpenTelemetry instrumentation (traces/metrics/logs)
-- [x] API surface mapped (25 endpoints, contracts, OpenAPI, `Portfolio.http`)
-- [ ] Wire endpoints to use cases; Problem Details mapping of domain errors; real authentication; `Idempotency-Key` storage
+- [x] API surface mapped (34 endpoints, contracts, OpenAPI, `Portfolio.http`)
+- [x] JWT authentication, refresh-token rotation, five access levels, and endpoint protection
+- [ ] Wire business endpoints to use cases; persistent Identity store (EF Core); MFA for staff; `Idempotency-Key` storage
 
 ## License
 
