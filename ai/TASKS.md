@@ -60,9 +60,8 @@ This file is the **single source of truth for task progress** during active deve
 ### Security
 
 - [ ] Validate and sanitize all inputs at system boundaries
-- [ ] Enforce authentication by default (fallback policy) and object-ownership checks on every resource endpoint
-- [ ] Implement password hashing (Argon2id), JWT validation, and refresh-token rotation per `ai/SECURITY.md`
-- [ ] Add rate limiting for authentication, checkout, payment, and coupon endpoints
+- [~] Enforce authentication by default (fallback policy) and object-ownership checks on every resource endpoint
+- [~] Add rate limiting for authentication, checkout, payment, and coupon endpoints
 - [ ] Verify payment webhook signatures and deduplicate provider events
 - [ ] Replace any hardcoded secrets with environment/secrets-manager references
 - [~] Enable NuGet Audit, secret scanning, and CodeQL, and resolve critical CVEs
@@ -115,3 +114,4 @@ This file is the **single source of truth for task progress** during active deve
 - [x] Add architecture tests enforcing the dependency flow (API → Application → Domain, Infrastructure implementing Domain-defined interfaces) and context boundaries
 - [x] Add `global.json`, `Directory.Build.props`, `Directory.Packages.props`, and `.editorconfig` (analyzers, nullable, warnings as errors, central package management, lock files)
 - [x] Resolve all analyzer and formatting (CSharpier/Prettier) warnings
+- [x] Implement password hashing (Argon2id), JWT validation, and refresh-token rotation per `ai/SECURITY.md`
