@@ -61,6 +61,7 @@ COPY --from=build /app/publish .
 # TLS terminates at the reverse proxy; Kestrel only speaks HTTP on 8080 (no capability needed to bind it).
 # DOTNET_EnableDiagnostics_IPC=0 closes the diagnostics socket in production (ai/CONTAINERS.md §13.1).
 ENV ASPNETCORE_URLS=http://+:8080 \
+    ASPNETCORE_HTTP_PORTS= \
     ASPNETCORE_ENVIRONMENT=Production \
     DOTNET_EnableDiagnostics_IPC=0
 
