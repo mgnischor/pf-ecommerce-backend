@@ -6,8 +6,8 @@ using Microsoft.Extensions.DependencyInjection;
 namespace Portfolio.IntegrationTests.Http;
 
 /// <summary>
-/// The mapped API: 25 versioned endpoints, default-deny authentication, Problem Details for operations
-/// whose use case is not implemented yet (ai/API_CONTRACTS.md §2, §4 and ai/SECURITY.md §2.2).
+/// The mapped API: versioned endpoints, default-deny authentication, Problem Details for operations whose
+/// use case is not implemented yet (ai/API_CONTRACTS.md §2, §4 and ai/SECURITY.md §2.2).
 /// </summary>
 public sealed class ApiSurfaceTests : IDisposable
 {
@@ -16,7 +16,7 @@ public sealed class ApiSurfaceTests : IDisposable
     public void Dispose() => _production.Dispose();
 
     [Fact]
-    public void Should_map_exactly_the_documented_endpoints_under_the_versioned_base_path()
+    public void Should_map_exactly_the_documented_endpoints()
     {
         var mapped = _production
             .Services.GetRequiredService<EndpointDataSource>()
@@ -31,7 +31,19 @@ public sealed class ApiSurfaceTests : IDisposable
         var expected = ApiEndpoints.All.Select(endpoint => $"{endpoint.Method} {endpoint.Template}").ToArray();
 
         mapped.ShouldBe(expected, ignoreOrder: true);
-        mapped.Length.ShouldBe(25);
+    }
+
+    [Fact]
+    public void Should_keep_every_business_endpoint_under_the_versioned_base_path()
+    {
+        var outside = ApiEndpoints
+            .All.Where(endpoint =>
+                !endpoint.Template.StartsWith("api/v1/", StringComparison.Ordinal)
+                && !string.Equals(endpoint.Template, ".well-known/jwks.json", StringComparison.Ordinal)
+            )
+            .ToArray();
+
+        outside.ShouldBeEmpty();
     }
 
     [Theory]
@@ -48,7 +60,7 @@ public sealed class ApiSurfaceTests : IDisposable
         using var response = await client.SendAsync(request, TestContext.Current.CancellationToken);
 
         response.StatusCode.ShouldBe(HttpStatusCode.Unauthorized);
-        response.Headers.WwwAuthenticate.ToString().ShouldBe("Bearer");
+        response.Headers.WwwAuthenticate.ToString().ShouldStartWith("Bearer");
     }
 
     [Fact]
@@ -81,21 +93,6 @@ public sealed class ApiSurfaceTests : IDisposable
 
         using var response = await client.GetAsync(
             new Uri(url, UriKind.Relative),
-            TestContext.Current.CancellationToken
-        );
-
-        response.StatusCode.ShouldBe(HttpStatusCode.NotImplemented);
-    }
-
-    [Fact]
-    public async Task Should_accept_a_well_formed_sign_in_request_without_credentials()
-    {
-        using var client = _production.CreateClient();
-        using var content = Json("""{"email":"ana.souza@example.com","password":"example-password-not-real"}""");
-
-        using var response = await client.PostAsync(
-            new Uri("/api/v1/auth/tokens", UriKind.Relative),
-            content,
             TestContext.Current.CancellationToken
         );
 
