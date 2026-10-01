@@ -76,6 +76,11 @@ internal static class ErrorProblemDetails
                 "forbidden",
                 "You are not allowed to perform this action."
             ),
+            ErrorType.PreconditionFailed => (
+                StatusCodes.Status412PreconditionFailed,
+                "precondition-failed",
+                "The resource changed since it was read."
+            ),
             _ => (StatusCodes.Status500InternalServerError, "internal-error", "An unexpected error occurred."),
         };
 }
