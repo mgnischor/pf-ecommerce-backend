@@ -5,7 +5,7 @@ using Portfolio.Identity.Domain;
 using Portfolio.Identity.Infrastructure;
 using Portfolio.SharedKernel.API.Authorization;
 using Portfolio.SharedKernel.API.RateLimiting;
-using Portfolio.SharedKernel.Application;
+using Portfolio.SharedKernel.Infrastructure;
 
 namespace Portfolio.Identity;
 
@@ -32,7 +32,7 @@ internal static class IdentityModule
 
         AddOptions(services, configuration);
         AddSecurityServices(services, allowEphemeralKeys);
-        AddStores(services);
+        AddStores(services, environment);
         AddUseCases(services);
 
         services.AddSingleton<IConfigureOptions<JwtBearerOptions>, ConfigureJwtBearerOptions>();
@@ -84,26 +84,27 @@ internal static class IdentityModule
         });
     }
 
-    // Temporary in-process stores, replaced by the EF Core adapters (ai/TASKS.md, Database).
-    private static void AddStores(IServiceCollection services)
+    private static void AddStores(IServiceCollection services, IHostEnvironment environment)
     {
-        services.AddSingleton<IUserRepository, InMemoryUserRepository>();
-        services.AddSingleton<IRefreshTokenRepository, InMemoryRefreshTokenRepository>();
+        services.AddModuleDbContext<IdentityDbContext>(IdentityDbContext.SchemaName, environment);
+        services.AddScoped<IUserRepository, EfUserRepository>();
+        services.AddScoped<IRefreshTokenRepository, EfRefreshTokenRepository>();
+
+        // Temporary in-process blocklist, replaced by the Valkey-backed store (ai/TASKS.md, Database).
         services.AddSingleton<IRevokedTokenStore, InMemoryRevokedTokenStore>();
-        services.AddSingleton<IUnitOfWork, InMemoryUnitOfWork>();
     }
 
     private static void AddUseCases(IServiceCollection services)
     {
         services.AddSingleton<PasswordPolicy>();
         services.AddScoped<TokenPairFactory>();
-        services.AddScoped<SignInHandler>();
-        services.AddScoped<RefreshTokenHandler>();
-        services.AddScoped<RevokeTokenHandler>();
-        services.AddScoped<RegisterCustomerHandler>();
-        services.AddScoped<CreateUserHandler>();
-        services.AddScoped<ChangeUserAccessLevelHandler>();
-        services.AddScoped<DeactivateUserHandler>();
+        services.AddUseCase<IdentityDbContext, SignInHandler>();
+        services.AddUseCase<IdentityDbContext, RefreshTokenHandler>();
+        services.AddUseCase<IdentityDbContext, RevokeTokenHandler>();
+        services.AddUseCase<IdentityDbContext, RegisterCustomerHandler>();
+        services.AddUseCase<IdentityDbContext, CreateUserHandler>();
+        services.AddUseCase<IdentityDbContext, ChangeUserAccessLevelHandler>();
+        services.AddUseCase<IdentityDbContext, DeactivateUserHandler>();
         services.AddHostedService<SecurityStartupCheck>();
         services.AddHostedService<IdentityBootstrapper>();
     }
