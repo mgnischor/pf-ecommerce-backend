@@ -2,7 +2,8 @@ namespace Portfolio.SharedKernel.Domain;
 
 /// <summary>
 /// Category of a domain failure. The API boundary maps it to an HTTP status
-/// (<see cref="Validation"/> → 400/422, <see cref="NotFound"/> → 404, <see cref="Conflict"/> → 409).
+/// (<see cref="Validation"/> → 422, <see cref="NotFound"/> → 404, <see cref="Conflict"/> → 409,
+/// <see cref="Unauthorized"/> → 401, <see cref="Forbidden"/> → 403).
 /// </summary>
 internal enum ErrorType
 {
@@ -14,4 +15,10 @@ internal enum ErrorType
 
     /// <summary>A state-transition, uniqueness, or concurrency conflict.</summary>
     Conflict = 2,
+
+    /// <summary>The caller could not be authenticated (bad credentials, invalid or expired token).</summary>
+    Unauthorized = 3,
+
+    /// <summary>The caller is authenticated but not allowed to perform the action.</summary>
+    Forbidden = 4,
 }
