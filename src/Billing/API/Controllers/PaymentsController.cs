@@ -4,17 +4,18 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Portfolio.Billing.API.Contracts;
 using Portfolio.SharedKernel.API;
+using Portfolio.SharedKernel.API.Authorization;
 
 namespace Portfolio.Billing.API.Controllers;
 
 /// <summary>Payments, refunds, and payment-provider callbacks.</summary>
 [Route("api/v1/payments")]
-public sealed class PaymentsController : ApiControllerBase
+internal sealed class PaymentsController : ApiControllerBase
 {
     /// <summary>Gets a payment with masked payment-method data. A payment of another customer answers <c>404</c>.</summary>
     /// <param name="paymentId">Payment identifier.</param>
     [HttpGet("{paymentId:guid}")]
-    [Authorize(Roles = ApiRoles.CustomerOrStaff)]
+    [Authorize(Policy = AccessPolicies.Authenticated)]
     [ProducesResponseType<PaymentResponse>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized, "application/problem+json")]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status403Forbidden, "application/problem+json")]
@@ -30,7 +31,7 @@ public sealed class PaymentsController : ApiControllerBase
     /// <param name="ifMatch">ETag of the payment version the client read.</param>
     /// <param name="request">Amount and reason.</param>
     [HttpPost("{paymentId:guid}/refunds")]
-    [Authorize(Roles = ApiRoles.FinanceStaff)]
+    [Authorize(Policy = AccessPolicies.Manager)]
     [ProducesResponseType<RefundResponse>(StatusCodes.Status201Created)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized, "application/problem+json")]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status403Forbidden, "application/problem+json")]
