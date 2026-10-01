@@ -3,16 +3,17 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Portfolio.Ordering.API.Contracts;
 using Portfolio.SharedKernel.API;
+using Portfolio.SharedKernel.API.Authorization;
 using Portfolio.SharedKernel.API.Contracts;
 
 namespace Portfolio.Ordering.API.Controllers;
 
 /// <summary>Order lifecycle after checkout. Customers only reach their own orders; others answer <c>404</c>.</summary>
 [Route("api/v1/orders")]
-[Authorize(Roles = ApiRoles.CustomerOrStaff)]
+[Authorize(Policy = AccessPolicies.Authenticated)]
 [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized, "application/problem+json")]
 [ProducesResponseType<ProblemDetails>(StatusCodes.Status403Forbidden, "application/problem+json")]
-public sealed class OrdersController : ApiControllerBase
+internal sealed class OrdersController : ApiControllerBase
 {
     /// <summary>Lists the caller's orders, newest first unless <paramref name="sort"/> says otherwise.</summary>
     /// <param name="limit">Page size, 1–100 (default 20).</param>
