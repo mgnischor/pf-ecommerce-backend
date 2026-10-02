@@ -1,0 +1,35 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "urn:ecommerce:events:identity.user-access-level-changed:v1",
+    "title": "identity.user-access-level-changed v1",
+    "description": "An account's access level changed. Consumers must ignore properties they do not know: adding one is a backward-compatible change.",
+    "type": "object",
+    "required": ["eventId", "aggregateId", "aggregateVersion", "occurredAt", "from", "to"],
+    "properties": {
+        "eventId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Unique per occurrence; the message-id consumers deduplicate on."
+        },
+        "aggregateId": {
+            "type": "string",
+            "format": "uuid"
+        },
+        "aggregateVersion": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Version of the aggregate after the change; detects gaps and reordering."
+        },
+        "occurredAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "UTC."
+        },
+        "from": {
+            "enum": ["public", "collaborator", "manager", "administrator", "developer"]
+        },
+        "to": {
+            "enum": ["public", "collaborator", "manager", "administrator", "developer"]
+        }
+    }
+}
