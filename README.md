@@ -1,6 +1,6 @@
 # pf-ecommerce-backend
 
-![Application Banner](./resource/image/ecommere_banner.jpg)
+![Application Banner](./resource/image/ecommerce_banner.jpg)
 
 A complete e-commerce platform built as a portfolio project. Modular monolith in C# / .NET 10, organized with Domain-Driven Design (DDD) by bounded context.
 
@@ -113,9 +113,9 @@ Connection strings, endpoints, credentials, and feature flags are externalized v
 | Setting                       | Description                                                                                                                                                               |
 | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `ConnectionStrings__Postgres` | PostgreSQL connection string (Npgsql). **Required**: the host refuses to start without it. Pool, timeout, and retry settings live under `Database:*` (`docs/database.md`) |
-| `ConnectionStrings__Valkey`   | Valkey connection string                                                                                                                                                  |
+| `ConnectionStrings__Valkey`   | Valkey connection string. **Required**: the host refuses to start without it. Tuning and failure mode live under `Valkey:*` (`docs/caching.md`)                           |
 | `ConnectionStrings__RabbitMQ` | RabbitMQ connection string                                                                                                                                                |
-| `OTEL_EXPORTER_OTLP_ENDPOINT` | OpenTelemetry collector endpoint                                                                                                                                          |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | OpenTelemetry Collector endpoint; nothing is exported without it. Other `OTEL_*` variables are standard (`docs/observability.md`)                                         |
 | `AllowedHosts`                | Semicolon-separated host names the API answers to. Defaults to `localhost` (`*` only in `Development`); **set it to the real host names in every other environment**      |
 
 Non-secret defaults live in `configuration/appsettings.json` and `configuration/appsettings.{Environment}.json`; the
@@ -262,9 +262,8 @@ memory, and PID limits. The API healthcheck is the application itself (`dotnet P
 `/health/ready`), because the chiseled image has no shell or `curl`. On `SIGTERM` readiness fails immediately, in-flight
 requests drain within 25 s, and Docker waits 35 s before killing the container.
 
-Known limitations: the application emits no OpenTelemetry yet (the pipeline is verified end to end with a synthetic
-OTLP record, including redaction), readiness checks PostgreSQL but not Valkey/RabbitMQ until those integrations exist,
-and ASP.NET Core Data Protection logs a warning about its in-memory key ring because nothing persists keys yet.
+Known limitations: readiness checks PostgreSQL and Valkey (Valkey reports Degraded, not Unhealthy) but not RabbitMQ until
+that integration exists, SLOs, alerts and dashboards are not defined yet, and ASP.NET Core Data Protection logs a warning about its in-memory key ring because nothing persists keys yet.
 
 ## Quality Gates
 
@@ -279,7 +278,8 @@ Defined by `ai/CODE.md §2` and enforced locally and in `.github/workflows/ci.ym
   `Portfolio.ArchitectureTests` (dependency flow, context boundaries, naming, visibility, explicit endpoint
   authorization, persistence rules), and `Portfolio.IntegrationTests` (in-process HTTP pipeline on a real PostgreSQL in a
   Testcontainers container: migrations, constraints, concurrency, outbox/inbox, least-privilege roles, JWT validation,
-  authorization matrix; Valkey and RabbitMQ join when their infrastructure lands).
+  authorization matrix; Valkey in a container for caching, blocklist and outage behavior; OTLP export to a fake Collector;
+  RabbitMQ joins when its infrastructure lands).
 - CI also checks that the migrations match the model (`dotnet ef migrations has-pending-model-changes`) and builds the
   migrations bundles and image.
 
@@ -290,8 +290,8 @@ Defined by `ai/CODE.md §2` and enforced locally and in `.github/workflows/ci.ym
 - [x] Quality baseline (analyzers as errors, central packages, lock files, CI) and architecture fitness functions
 - [x] EF Core + PostgreSQL persistence for Identity, Catalog, and Inventory: schema and `DbContext` per context, versioned migrations and bundles, traceability, soft delete, concurrency tokens, least-privilege roles, outbox, relay, inbox (`docs/database.md`)
 - [ ] RabbitMQ publisher for the outbox relay and the first inbox consumer
-- [ ] Valkey caching with explicit TTL/invalidation
-- [ ] OpenTelemetry instrumentation in the application (the Collector/Prometheus/Loki/Tempo/Grafana stack is ready)
+- [x] Valkey caching with explicit TTL, versioned keys, event-driven invalidation, outage fallback, and the access-token blocklist (`docs/caching.md`)
+- [~] OpenTelemetry in the application: SDK, traces, RED and business metrics, outbox trace propagation, correlation (`docs/observability.md`); SLOs, alerts, dashboards and tail sampling pending
 - [x] API surface mapped (34 endpoints, contracts, OpenAPI, `Portfolio.http`)
 - [x] JWT authentication, refresh-token rotation, five access levels, and endpoint protection
 - [x] Dockerfile and Compose stacks (development and production) with pinned versions
