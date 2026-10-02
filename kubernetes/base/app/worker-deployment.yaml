@@ -1,0 +1,152 @@
+# Worker role: the same image, selected by configuration (ai/CONTAINERS.md §6.1). It runs the outbox relays and the
+# RabbitMQ consumers, receives no traffic from outside the namespace, and scales on queue depth (worker-scaledobject.yaml).
+# Every instance is safe beside the others: the relay claims rows with SKIP LOCKED, consumers deduplicate through the inbox.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+    name: ecommerce-worker
+    labels:
+        app.kubernetes.io/name: ecommerce-worker
+        app.kubernetes.io/component: worker
+spec:
+    replicas: 2
+    revisionHistoryLimit: 10
+    progressDeadlineSeconds: 300
+    strategy:
+        type: RollingUpdate
+        rollingUpdate:
+            maxUnavailable: 0
+            maxSurge: 1
+    selector:
+        matchLabels:
+            app.kubernetes.io/name: ecommerce-worker
+    template:
+        metadata:
+            labels:
+                app.kubernetes.io/name: ecommerce-worker
+                app.kubernetes.io/component: worker
+        spec:
+            serviceAccountName: ecommerce-app
+            automountServiceAccountToken: false
+            priorityClassName: ecommerce-critical
+            # Consumers get up to 15 s to finish in-flight messages, inside HostOptions.ShutdownTimeout (25 s).
+            terminationGracePeriodSeconds: 60
+            securityContext:
+                runAsNonRoot: true
+                runAsUser: 1654
+                runAsGroup: 1654
+                fsGroup: 1654
+                seccompProfile:
+                    type: RuntimeDefault
+            topologySpreadConstraints:
+                - maxSkew: 1
+                  topologyKey: topology.kubernetes.io/zone
+                  whenUnsatisfiable: ScheduleAnyway
+                  labelSelector:
+                      matchLabels:
+                          app.kubernetes.io/name: ecommerce-worker
+            affinity:
+                podAntiAffinity:
+                    preferredDuringSchedulingIgnoredDuringExecution:
+                        - weight: 100
+                          podAffinityTerm:
+                              topologyKey: kubernetes.io/hostname
+                              labelSelector:
+                                  matchLabels:
+                                      app.kubernetes.io/name: ecommerce-worker
+            containers:
+                - name: ecommerce-worker
+                  image: registry.example.com/ecommerce-api
+                  imagePullPolicy: IfNotPresent
+                  securityContext:
+                      allowPrivilegeEscalation: false
+                      readOnlyRootFilesystem: true
+                      capabilities:
+                          drop: ["ALL"]
+                  ports:
+                      - name: http
+                        containerPort: 8080
+                        protocol: TCP
+                  envFrom:
+                      - configMapRef:
+                            name: ecommerce-config
+                  env:
+                      # Static part of the resource attributes (environment, owner), from the ConfigMap; it must come first
+                      # because $(VAR) only expands variables defined above it.
+                      - name: OTEL_RESOURCE_ATTRIBUTES_STATIC
+                        valueFrom:
+                            configMapKeyRef:
+                                name: ecommerce-config
+                                key: OTEL_RESOURCE_ATTRIBUTES_STATIC
+                      - name: Outbox__Relay__Enabled
+                        value: "true"
+                      - name: RabbitMq__ConsumersEnabled
+                        value: "true"
+                      # The API creates the first accounts and applies nothing at startup; the worker never does either.
+                      - name: OTEL_SERVICE_NAME
+                        value: ecommerce-worker
+                      - name: K8S_POD_NAME
+                        valueFrom:
+                            fieldRef:
+                                fieldPath: metadata.name
+                      - name: K8S_NAMESPACE_NAME
+                        valueFrom:
+                            fieldRef:
+                                fieldPath: metadata.namespace
+                      - name: APP_VERSION
+                        valueFrom:
+                            fieldRef:
+                                fieldPath: metadata.labels['app.kubernetes.io/version']
+                      - name: OTEL_RESOURCE_ATTRIBUTES
+                        value: "service.version=$(APP_VERSION),k8s.pod.name=$(K8S_POD_NAME),k8s.namespace.name=$(K8S_NAMESPACE_NAME),$(OTEL_RESOURCE_ATTRIBUTES_STATIC)"
+                  resources:
+                      requests:
+                          cpu: 250m
+                          memory: 256Mi
+                          ephemeral-storage: 100Mi
+                      limits:
+                          cpu: "1"
+                          memory: 512Mi
+                          ephemeral-storage: 500Mi
+                  startupProbe:
+                      httpGet:
+                          path: /health/live
+                          port: http
+                      periodSeconds: 5
+                      failureThreshold: 30
+                  livenessProbe:
+                      httpGet:
+                          path: /health/live
+                          port: http
+                      periodSeconds: 15
+                      timeoutSeconds: 3
+                      failureThreshold: 3
+                  readinessProbe:
+                      httpGet:
+                          path: /health/ready
+                          port: http
+                      periodSeconds: 10
+                      timeoutSeconds: 5
+                      failureThreshold: 3
+                  lifecycle:
+                      preStop:
+                          sleep:
+                              seconds: 5
+                  volumeMounts:
+                      - name: tmp
+                        mountPath: /tmp
+                      - name: secrets
+                        mountPath: /run/secrets
+                        readOnly: true
+            volumes:
+                - name: tmp
+                  emptyDir:
+                      medium: Memory
+                      sizeLimit: 64Mi
+                - name: secrets
+                  projected:
+                      defaultMode: 0440
+                      sources:
+                          # No bootstrap-account secret: only the API creates the first accounts.
+                          - secret:
+                                name: ecommerce-app-secrets
