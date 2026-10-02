@@ -6,6 +6,9 @@ internal sealed class OutboxRelayOptions
     /// <summary>Configuration section name.</summary>
     public const string SectionName = "Outbox:Relay";
 
+    /// <summary>Whether this process runs the relays. On only in the worker role; the API role leaves events in the outbox.</summary>
+    public bool Enabled { get; init; }
+
     /// <summary>Pause between polls when nothing was pending.</summary>
     public TimeSpan PollInterval { get; init; } = TimeSpan.FromSeconds(2);
 
