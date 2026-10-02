@@ -43,15 +43,35 @@ public sealed class MigrationTests : DatabaseTestBase
     }
 
     [Fact]
-    public async Task Should_keep_one_applied_migration_in_each_contexts_own_history_table()
+    public async Task Should_keep_the_applied_migrations_in_each_contexts_own_history_table_in_order()
     {
         foreach (var schema in new[] { "identity", "catalog", "inventory" })
         {
-            var applied = await Database.StringsAsync($"SELECT migration_id FROM {schema}.__ef_migrations_history");
+            var applied = await Database.StringsAsync(
+                $"SELECT migration_id FROM {schema}.__ef_migrations_history ORDER BY migration_id"
+            );
 
-            applied
-                .ShouldHaveSingleItem()
-                .ShouldEndWith($"_Create{char.ToUpperInvariant(schema[0])}{schema[1..]}Schema");
+            applied.Count.ShouldBe(2);
+            applied[0].ShouldEndWith($"_Create{char.ToUpperInvariant(schema[0])}{schema[1..]}Schema");
+            applied[1].ShouldEndWith("_AddOutboxTraceContext");
+        }
+    }
+
+    [Fact]
+    public async Task Should_add_the_trace_context_columns_to_every_outbox_as_nullable_so_the_old_version_keeps_working()
+    {
+        foreach (var schema in new[] { "identity", "catalog", "inventory" })
+        {
+            var columns = await Database.StringsAsync(
+                $"""
+                SELECT column_name || ':' || is_nullable FROM information_schema.columns
+                WHERE table_schema = '{schema}' AND table_name = 'outbox_messages'
+                  AND column_name IN ('trace_parent', 'trace_state') ORDER BY column_name
+                """
+            );
+
+            // Expand phase of expand/contract: an application that does not know the columns still inserts rows.
+            columns.ShouldBe(["trace_parent:YES", "trace_state:YES"]);
         }
     }
 
