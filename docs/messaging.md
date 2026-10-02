@@ -56,7 +56,7 @@ types.
 ## Roles and configuration
 
 The API role does not need the broker: nothing below is registered unless a flag is on. The **worker role** sets
-`Outbox__Relay__Enabled=true` and `RabbitMq__ConsumersEnabled=true` (the `ecommerce-worker` service in both Compose files);
+`Outbox__Relay__Enabled=true` and `RabbitMq__ConsumersEnabled=true` (the `ecommerce-worker` service in both Compose files and the `ecommerce-worker` Deployment in `kubernetes/`, scaled by KEDA on queue depth);
 the process then requires the secret `ConnectionStrings__RabbitMQ` (`amqp://user:password@host:5672`, `amqps://` outside
 development) and refuses to start without it. A broker that is down at start does not stop the process: readiness reports
 **degraded**, consumers keep retrying to subscribe, and events wait in the outbox (`app.outbox.pending`,
@@ -80,5 +80,4 @@ workers, not by parallelism inside one.
 ## Not built yet
 
 Consumers for Checkout, Ordering, Billing and Notifications (those contexts have no domain yet), a purge job for expired
-inbox rows, an alert on dead-letter queue depth, automatic compatibility checking between schema versions, and the
-Kubernetes worker Deployment (the Kustomize task is still open).
+inbox rows, an alert on dead-letter queue depth, and automatic compatibility checking between schema versions.
