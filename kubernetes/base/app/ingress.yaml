@@ -1,0 +1,78 @@
+# The only way in from outside (ai/CONTAINERS.md §6.3). Routes are listed one by one, never as a wildcard: /health/*,
+# /api/v1/docs, /api/v1/openapi and /api/v1/diagnostics are deliberately absent. The host, the TLS secret and the cert-manager
+# issuer belong to the overlay. Rate limiting and a WAF at the controller add to the application's own limits.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+    name: ecommerce-api
+    labels:
+        app.kubernetes.io/name: ecommerce-api
+        app.kubernetes.io/component: api
+    annotations:
+        nginx.ingress.kubernetes.io/ssl-redirect: "true"
+        nginx.ingress.kubernetes.io/proxy-body-size: 1m # Kestrel's MaxRequestBodySize
+        nginx.ingress.kubernetes.io/proxy-connect-timeout: "5"
+        nginx.ingress.kubernetes.io/proxy-read-timeout: "30"
+        nginx.ingress.kubernetes.io/proxy-send-timeout: "30"
+        nginx.ingress.kubernetes.io/limit-rps: "50"
+        nginx.ingress.kubernetes.io/limit-connections: "50"
+spec:
+    ingressClassName: nginx
+    tls:
+        - hosts:
+              - api.example.com
+          secretName: ecommerce-api-tls
+    rules:
+        - host: api.example.com
+          http:
+              paths:
+                  - {
+                        path: /api/v1/auth,
+                        pathType: Prefix,
+                        backend: { service: { name: ecommerce-api, port: { name: http } } },
+                    }
+                  - {
+                        path: /api/v1/users,
+                        pathType: Prefix,
+                        backend: { service: { name: ecommerce-api, port: { name: http } } },
+                    }
+                  - {
+                        path: /api/v1/customers,
+                        pathType: Prefix,
+                        backend: { service: { name: ecommerce-api, port: { name: http } } },
+                    }
+                  - {
+                        path: /api/v1/products,
+                        pathType: Prefix,
+                        backend: { service: { name: ecommerce-api, port: { name: http } } },
+                    }
+                  - {
+                        path: /api/v1/inventory,
+                        pathType: Prefix,
+                        backend: { service: { name: ecommerce-api, port: { name: http } } },
+                    }
+                  - {
+                        path: /api/v1/carts,
+                        pathType: Prefix,
+                        backend: { service: { name: ecommerce-api, port: { name: http } } },
+                    }
+                  - {
+                        path: /api/v1/checkouts,
+                        pathType: Prefix,
+                        backend: { service: { name: ecommerce-api, port: { name: http } } },
+                    }
+                  - {
+                        path: /api/v1/orders,
+                        pathType: Prefix,
+                        backend: { service: { name: ecommerce-api, port: { name: http } } },
+                    }
+                  - {
+                        path: /api/v1/payments,
+                        pathType: Prefix,
+                        backend: { service: { name: ecommerce-api, port: { name: http } } },
+                    }
+                  - {
+                        path: /.well-known/jwks.json,
+                        pathType: Exact,
+                        backend: { service: { name: ecommerce-api, port: { name: http } } },
+                    }
