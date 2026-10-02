@@ -9,10 +9,17 @@ namespace Portfolio.SharedKernel.Infrastructure;
 /// The transactional outbox (ai/DATABASE.md §3.1): converts the domain events raised by the tracked aggregates
 /// into <see cref="OutboxMessage"/> rows that commit in the same transaction as the state change, so an event
 /// exists if and only if its change was committed. Nothing is ever published from here; the relay does that
-/// after the commit. The events are cleared from the aggregates only once the commit succeeded.
+/// after the commit. The row stores the trace context of the request that raised the event (ai/OBSERVABILITY.md §6.4), so
+/// the relay can continue the trace. The events are cleared from the aggregates, and handed to the
+/// <see cref="IDomainEventSubscriber"/>s, only once the commit succeeded.
 /// </summary>
-internal sealed class OutboxSaveChangesInterceptor : SaveChangesInterceptor
+internal sealed partial class OutboxSaveChangesInterceptor(
+    IEnumerable<IDomainEventSubscriber> subscribers,
+    ILogger<OutboxSaveChangesInterceptor> logger
+) : SaveChangesInterceptor
 {
+    private readonly IDomainEventSubscriber[] _subscribers = [.. subscribers];
+
     /// <inheritdoc />
     public override InterceptionResult<int> SavingChanges(DbContextEventData eventData, InterceptionResult<int> result)
     {
@@ -40,12 +47,14 @@ internal sealed class OutboxSaveChangesInterceptor : SaveChangesInterceptor
     {
         ArgumentNullException.ThrowIfNull(eventData);
 
-        ClearEvents(eventData.Context);
+        var committed = TakeEvents(eventData.Context);
+        // The synchronous path is not used by the use cases; it exists because EF Core calls it from SaveChanges().
+        DispatchAsync(committed, CancellationToken.None).GetAwaiter().GetResult();
         return result;
     }
 
     /// <inheritdoc />
-    public override ValueTask<int> SavedChangesAsync(
+    public override async ValueTask<int> SavedChangesAsync(
         SaveChangesCompletedEventData eventData,
         int result,
         CancellationToken cancellationToken = default
@@ -53,8 +62,8 @@ internal sealed class OutboxSaveChangesInterceptor : SaveChangesInterceptor
     {
         ArgumentNullException.ThrowIfNull(eventData);
 
-        ClearEvents(eventData.Context);
-        return ValueTask.FromResult(result);
+        await DispatchAsync(TakeEvents(eventData.Context), cancellationToken);
+        return result;
     }
 
     private static void Enqueue(DbContext? context)
@@ -64,7 +73,10 @@ internal sealed class OutboxSaveChangesInterceptor : SaveChangesInterceptor
             return;
         }
 
-        var correlationId = Activity.Current?.TraceId.ToString();
+        var current = Activity.Current;
+        var correlationId = current?.TraceId.ToString();
+        var traceParent = current?.IdFormat == ActivityIdFormat.W3C ? current.Id : null;
+        var traceState = current?.TraceStateString;
 
         foreach (var entry in module.ChangeTracker.Entries<AggregateRoot>().ToList())
         {
@@ -76,21 +88,51 @@ internal sealed class OutboxSaveChangesInterceptor : SaveChangesInterceptor
                     continue;
                 }
 
-                module.OutboxMessages.Add(OutboxMessage.From(domainEvent, correlationId, causationId: null));
+                module.OutboxMessages.Add(
+                    OutboxMessage.From(domainEvent, correlationId, causationId: null, traceParent, traceState)
+                );
             }
         }
     }
 
-    private static void ClearEvents(DbContext? context)
+    private static List<IDomainEvent> TakeEvents(DbContext? context)
     {
+        var committed = new List<IDomainEvent>();
         if (context is null)
         {
-            return;
+            return committed;
         }
 
-        foreach (var entry in context.ChangeTracker.Entries<AggregateRoot>())
+        foreach (var aggregate in context.ChangeTracker.Entries<AggregateRoot>().Select(entry => entry.Entity))
         {
-            entry.Entity.ClearDomainEvents();
+            committed.AddRange(aggregate.DomainEvents);
+            aggregate.ClearDomainEvents();
+        }
+
+        return committed;
+    }
+
+    private async Task DispatchAsync(List<IDomainEvent> committed, CancellationToken cancellationToken)
+    {
+        foreach (var domainEvent in committed)
+        {
+            foreach (var subscriber in _subscribers)
+            {
+                try
+                {
+                    await subscriber.OnCommittedAsync(domainEvent, cancellationToken);
+                }
+                catch (Exception exception) when (exception is not OperationCanceledException)
+                {
+                    // The change is already committed: a subscriber must never turn that into a failed request.
+                    SubscriberLog.Failed(
+                        logger,
+                        subscriber.GetType().Name,
+                        domainEvent.GetType().Name,
+                        exception.GetType().Name
+                    );
+                }
+            }
         }
     }
 }
