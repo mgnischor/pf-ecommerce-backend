@@ -1,3 +1,4 @@
+using System.Diagnostics.Metrics;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -193,6 +194,7 @@ public sealed class OutboxTests : DatabaseTestBase
     )
     {
         var services = new ServiceCollection();
+        services.AddMetrics();
         services.AddScoped(_ => TestContexts.Inventory(DataSource, Clock));
         var provider = services.BuildServiceProvider();
 
@@ -208,6 +210,7 @@ public sealed class OutboxTests : DatabaseTestBase
                     Lease = TimeSpan.FromSeconds(30),
                 }
             ),
+            provider.GetRequiredService<IMeterFactory>(),
             NullLogger<OutboxRelay<InventoryDbContext>>.Instance
         );
     }
