@@ -76,7 +76,7 @@ This file is the **single source of truth for task progress** during active deve
 
 ### Containers
 
-- [ ] Write the Kubernetes base and overlays (Kustomize) with security contexts, resources, PDBs, and network policies
+- [x] Write the Kubernetes base and overlays (Kustomize) with security contexts, resources, PDBs, and network policies
 - [~] Implement liveness, readiness, and startup endpoints; handle `SIGTERM` gracefully (consumers and outbox relay included)
 
 ### Infrastructure as Code
