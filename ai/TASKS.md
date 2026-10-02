@@ -47,7 +47,7 @@ This file is the **single source of truth for task progress** during active deve
 - [x] Write reviewed EF Core migrations (expand/contract) and a migrations-bundle step for deployment
 - [~] Implement the transactional outbox, relay, and inbox/idempotency tables
 - [x] Parameterize all queries (no raw string interpolation)
-- [ ] Define Valkey cache entries with explicit TTL, key versioning, invalidation, and outage fallback
+- [x] Define Valkey cache entries with explicit TTL, key versioning, invalidation, and outage fallback
 
 ### API Contract
 
@@ -89,11 +89,11 @@ This file is the **single source of truth for task progress** during active deve
 
 ### Observability
 
-- [ ] Bootstrap the OpenTelemetry SDK (traces, metrics, logs over OTLP) with the mandatory resource attributes and no telemetry in the Domain layer
-- [ ] Instrument PostgreSQL, Valkey, RabbitMQ, the outbox relay, and background jobs, with trace propagation through the outbox
+- [x] Bootstrap the OpenTelemetry SDK (traces, metrics, logs over OTLP) with the mandatory resource attributes and no telemetry in the Domain layer
+- [~] Instrument PostgreSQL, Valkey, RabbitMQ, the outbox relay, and background jobs, with trace propagation through the outbox
 - [ ] Define SLOs as code for the critical journeys (checkout, payment, sign-in, catalog) with burn-rate alerts, runbooks, and dashboards
 - [ ] Configure the Collector pipeline (redaction, tail sampling, security-log routing)
-- [ ] Verify no secrets or personal data appear in logs, spans, or metric labels
+- [~] Verify no secrets or personal data appear in logs, spans, or metric labels
 
 ---
 
