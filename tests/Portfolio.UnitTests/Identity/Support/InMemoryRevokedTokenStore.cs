@@ -1,10 +1,10 @@
 using System.Collections.Concurrent;
 using Portfolio.Identity.Application;
 
-namespace Portfolio.Identity.Infrastructure;
+namespace Portfolio.UnitTests.Identity.Support;
 
 /// <summary>
-/// Temporary in-process <c>jti</c> blocklist until the Valkey-backed store exists. Entries expire with the
+/// In-process stand-in for the Valkey-backed <c>jti</c> blocklist, so handler tests need no server. Entries expire with the
 /// token they block, so the set stays bounded by the access-token lifetime.
 /// </summary>
 internal sealed class InMemoryRevokedTokenStore(TimeProvider timeProvider) : IRevokedTokenStore
