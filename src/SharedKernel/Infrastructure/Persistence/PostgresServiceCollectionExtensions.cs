@@ -60,6 +60,9 @@ internal static class PostgresServiceCollectionExtensions
             services.AddHostedService<DevelopmentDatabaseMigrator>();
         }
 
+        // The backlog of every registered context, whether or not a relay publishes it (ai/OBSERVABILITY.md §5.5).
+        services.AddHostedService<OutboxBacklogMonitor>();
+
         return services;
     }
 
