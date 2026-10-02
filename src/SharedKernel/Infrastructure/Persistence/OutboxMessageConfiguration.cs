@@ -35,6 +35,8 @@ internal sealed class OutboxMessageConfiguration : IEntityTypeConfiguration<Outb
         builder.Property(message => message.OccurredAt).HasColumnType("timestamptz").IsRequired();
         builder.Property(message => message.CorrelationId).HasMaxLength(64);
         builder.Property(message => message.CausationId).HasMaxLength(64);
+        builder.Property(message => message.TraceParent).HasMaxLength(OutboxMessage.TraceParentLength);
+        builder.Property(message => message.TraceState).HasMaxLength(OutboxMessage.MaxTraceStateLength);
         builder.Property(message => message.ProcessedAt).HasColumnType("timestamptz");
         builder.Property(message => message.Attempts).IsRequired();
         builder.Property(message => message.LockedUntil).HasColumnType("timestamptz");
