@@ -1,0 +1,13 @@
+# Lets kubernetes/migrations ship the provisioning script and its SQL as a ConfigMap, from the files Compose mounts, instead of
+# copies. A directory used as a Kustomize resource may sit outside the referencing root; a file may not.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+generatorOptions:
+    immutable: true
+
+configMapGenerator:
+    - name: database-provisioning
+      files:
+          - provision.sh
+          - provision-roles.sql
