@@ -47,12 +47,18 @@ builder.WebHost.ConfigureKestrel(options =>
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddProblemDetails();
 builder.Services.AddApiHealthChecks();
+builder.Services.AddObservability(builder.Logging, builder.Configuration, builder.Environment);
 builder.Services.AddPostgres(builder.Configuration, builder.Environment);
+builder.Services.AddValkey(builder.Configuration);
 builder.Services.AddIdentityModule(builder.Configuration, builder.Environment);
 builder.Services.AddCatalogModule(builder.Environment);
 builder.Services.AddInventoryModule(builder.Environment);
 builder
-    .Services.AddControllers()
+    .Services.AddControllers(options =>
+    {
+        // Attributes every request to a bounded context and an actor, on the server span and in the log scope.
+        options.Filters.Add<ActionTelemetryFilter>();
+    })
     .ConfigureApplicationPartManager(manager =>
     {
         // Controllers are internal like the rest of the codebase; the default provider only finds public ones.
@@ -68,6 +74,9 @@ builder
 builder.Services.AddOpenApi();
 
 var app = builder.Build();
+
+// First, so the identifier is on every response, including the ones the exception handler writes.
+app.UseMiddleware<RequestCorrelationMiddleware>();
 
 if (!app.Environment.IsDevelopment())
 {
