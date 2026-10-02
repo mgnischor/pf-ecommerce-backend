@@ -1,0 +1,25 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# What must succeed before a release rolls out: roles, schemas, migrations, grants (db-release-job.yaml). Applied by the
+# pipeline on its own, separately from the workloads, so overlays/<env>/migrations builds only this.
+resources:
+    - serviceaccount.yaml
+    - external-secrets.yaml
+    - network-policies.yaml
+    - db-release-job.yaml
+    # database-provisioning ConfigMap, generated from the same two files Compose mounts.
+    - ../../database
+
+generatorOptions:
+    immutable: true
+
+configMapGenerator:
+    - name: database-connection
+      literals:
+          # Not secret. The managed instance endpoint and its admin user are replaced in every overlay.
+          - PGHOST=postgres.example.internal
+          - PGPORT=5432
+          - PGDATABASE=ecommerce
+          - PGUSER=app_admin
+          - PGSSLMODE=require
