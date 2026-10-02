@@ -1,0 +1,17 @@
+# ClusterIP only (ai/CONTAINERS.md §6.3): the Ingress is the single way in.
+apiVersion: v1
+kind: Service
+metadata:
+    name: ecommerce-api
+    labels:
+        app.kubernetes.io/name: ecommerce-api
+        app.kubernetes.io/component: api
+spec:
+    type: ClusterIP
+    selector:
+        app.kubernetes.io/name: ecommerce-api
+    ports:
+        - name: http
+          port: 80
+          targetPort: http
+          protocol: TCP
