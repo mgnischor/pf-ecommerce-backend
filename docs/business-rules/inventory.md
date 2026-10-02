@@ -115,15 +115,17 @@ Common attributes for all rules: **Owner** — to be assigned; **Source** — In
 | Preconditions  | Opening an item.                                                                                                                                                                                                                                                                                                                                                   |
 | Postconditions | The item starts with `OnHand = 0`, `Reserved = 0`, version 1, and `InventoryItemOpened` is raised.                                                                                                                                                                                                                                                                 |
 | Error behavior | `Conflict` failure `INVENTORY_ITEM_ALREADY_EXISTS`. The handler check covers sequential requests and retries; concurrent requests are closed by a partial unique index (`UNIQUE (sku) WHERE deleted_at IS NULL`, `ai/DATABASE.md §3.2`) `inventory.ux_inventory_items_sku_active`, created by the first migration; a lost race surfaces as `409 DUPLICATE_RECORD`. |
-| Implemented in | `OpenInventoryItemHandler` (check), `InventoryItemConfiguration` (index)                                                                                                                                                                                                                                                                                           |
+| Implemented in | `OpenInventoryItemHandler` (check), `OpenInventoryItemOnProductCreatedHandler` (same rule on the Catalog's `ProductCreated`), `InventoryItemConfiguration` (index)                                                                                                                                                                                                 |
 
 ## Open questions for the business owner
 
 These behaviors are **not** specified yet; the code deliberately does not invent them.
 
-1. **Who opens an item.** Today a manager opens it with `POST /inventory/items`, and nothing checks that the SKU
-   exists in the Catalog (contexts only talk through events). Should it be opened automatically when `ProductCreated`
-   arrives, and should the manual endpoint then go away?
+1. **Who opens an item.** Both ways exist today: a manager opens it with `POST /inventory/items`, and the
+   `inventory.open-item-on-product-created` consumer opens it when the Catalog's `ProductCreated` arrives (an item that
+   already exists is left alone, so the two never conflict). The consumer was added as the documented intent of the
+   handler, **not** as a confirmed business decision: should the manual endpoint go away, and should a SKU be tracked
+   from `Draft` or only once the product is activated?
 2. **Reservation lifecycle.** `Reserve` and `Release` only move a counter. The `ai/TASKS.md` item "state machines
    for … Stock Reservation" is still open: reservation expiry, committing a reservation on shipment (which lowers
    `OnHand`), and the per-order identity of a reservation are not modeled.
