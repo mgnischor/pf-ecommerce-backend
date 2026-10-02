@@ -144,7 +144,7 @@ variable "valkey_replicas" {
 variable "secret_names" {
   description = "Names of the secret containers to create (values are injected out of band, never by Terraform)."
   type        = set(string)
-  default     = ["jwt-signing-key", "rabbitmq-credentials", "payment-provider-api-key", "payment-webhook-secret"]
+  default     = ["jwt-signing-key", "rabbitmq-credentials", "payment-provider-api-key", "payment-webhook-secret", "identity-token-hash-key", "identity-bootstrap-admin", "postgres-admin-credentials", "postgres-migrator-password", "postgres-runtime-password", "postgres-readonly-password", "postgres-migrator-connection", "postgres-runtime-connection", "valkey-connection"]
 }
 
 variable "observability_buckets" {
