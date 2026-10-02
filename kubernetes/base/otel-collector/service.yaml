@@ -1,0 +1,15 @@
+# The application pushes OTLP here (OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4317). ClusterIP, internal only.
+apiVersion: v1
+kind: Service
+metadata:
+    name: otel-collector
+    labels:
+        app.kubernetes.io/name: otel-collector
+        app.kubernetes.io/component: observability
+spec:
+    type: ClusterIP
+    selector:
+        app.kubernetes.io/name: otel-collector
+    ports:
+        - { name: otlp-grpc, port: 4317, targetPort: otlp-grpc, protocol: TCP }
+        - { name: otlp-http, port: 4318, targetPort: otlp-http, protocol: TCP }
