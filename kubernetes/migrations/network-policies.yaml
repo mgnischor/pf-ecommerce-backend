@@ -1,0 +1,28 @@
+# The release Job may reach PostgreSQL inside the VPC and nothing else (ai/CONTAINERS.md §7.3). The namespace-wide
+# default-deny and DNS policies are owned by the workloads (base/app/network-policies.yaml) and cover this Job's Pod too;
+# on a namespace that does not have them yet, this policy still limits its egress. The CIDR is patched per overlay.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+    name: db-release-egress
+spec:
+    podSelector:
+        matchLabels:
+            app.kubernetes.io/name: ecommerce-db-release
+    policyTypes: [Egress]
+    egress:
+        - to:
+              - ipBlock:
+                    cidr: 10.0.0.0/16 # VPC range: replaced in every overlay
+          ports:
+              - { protocol: TCP, port: 5432 }
+        - to:
+              - namespaceSelector:
+                    matchLabels:
+                        kubernetes.io/metadata.name: kube-system
+                podSelector:
+                    matchLabels:
+                        k8s-app: kube-dns
+          ports:
+              - { protocol: UDP, port: 53 }
+              - { protocol: TCP, port: 53 }
