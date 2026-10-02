@@ -125,4 +125,28 @@ internal static class PostgresServiceCollectionExtensions
             ActivatorUtilities.CreateInstance<THandler>(provider, provider.GetRequiredService<TContext>())
         );
     }
+
+    /// <summary>
+    /// Registers a message consumer's use case: like <see cref="AddUseCase{TContext, THandler}"/>, and the handler's
+    /// <see cref="IInbox"/> is that context's own inbox, so the inbox row commits with the handler's writes.
+    /// </summary>
+    /// <typeparam name="TContext">The context that commits the use case and owns the inbox.</typeparam>
+    /// <typeparam name="THandler">Use case class taking an <see cref="IUnitOfWork"/> and an <see cref="IInbox"/>.</typeparam>
+    /// <param name="services">Service collection.</param>
+    public static IServiceCollection AddConsumerUseCase<TContext, THandler>(this IServiceCollection services)
+        where TContext : ModuleDbContext
+        where THandler : class
+    {
+        ArgumentNullException.ThrowIfNull(services);
+
+        return services.AddScoped(provider =>
+        {
+            var context = provider.GetRequiredService<TContext>();
+            return ActivatorUtilities.CreateInstance<THandler>(
+                provider,
+                context,
+                new Inbox(context, provider.GetRequiredService<TimeProvider>())
+            );
+        });
+    }
 }
