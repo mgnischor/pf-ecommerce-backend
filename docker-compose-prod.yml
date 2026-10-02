@@ -149,6 +149,74 @@ services:
             - backend
             - observability
 
+    # The worker role (ai/CONTAINERS.md §6.1): the same image, selected by configuration. It runs the outbox relays and the
+    # message consumers, publishes no port and joins no edge network. Scale it independently of the API; every instance is
+    # safe beside the others (the relay claims rows with SKIP LOCKED, consumers deduplicate through the inbox).
+    ecommerce-worker:
+        <<: *hardening
+        image: ${API_IMAGE:?set API_IMAGE to registry/ecommerce-api:<version>@sha256:<digest>}
+        environment:
+            ASPNETCORE_ENVIRONMENT: Production
+            AllowedHosts: "${API_ALLOWED_HOSTS:?set API_ALLOWED_HOSTS to the public host name(s), separated by ;}"
+            Jwt__Issuer: "${JWT_ISSUER:?set JWT_ISSUER to the public https URL of the API}"
+            Jwt__ActiveKeyId: "${JWT_ACTIVE_KEY_ID:-key-1}"
+            Jwt__Keys__0__Id: "${JWT_ACTIVE_KEY_ID:-key-1}"
+            Jwt__Keys__0__PrivateKeyPemFile: /run/secrets/jwt_es384_private_key
+            Outbox__Relay__Enabled: "true"
+            RabbitMq__ConsumersEnabled: "true"
+            OTEL_SERVICE_NAME: ecommerce-worker
+            OTEL_RESOURCE_ATTRIBUTES: "deployment.environment.name=production,service.version=${API_VERSION:-unknown},app.owner=${APP_OWNER:-team-platform}"
+            OTEL_EXPORTER_OTLP_ENDPOINT: "http://otel-collector:4317"
+            OTEL_EXPORTER_OTLP_PROTOCOL: grpc
+            OTEL_PROPAGATORS: tracecontext,baggage
+            OTEL_TRACES_SAMPLER: parentbased_traceidratio
+            OTEL_TRACES_SAMPLER_ARG: "1.0"
+            OTEL_METRICS_EXEMPLAR_FILTER: trace_based
+            OTEL_METRIC_EXPORT_INTERVAL: "30000"
+            OTEL_ATTRIBUTE_VALUE_LENGTH_LIMIT: "2048"
+            OTEL_SEMCONV_STABILITY_OPT_IN: http,database
+        # No bootstrap-account secrets: only the API creates the first accounts.
+        secrets:
+            - source: jwt_es384_private_key
+              target: jwt_es384_private_key
+            - source: identity_token_hash_key
+              target: Identity__TokenHashKey
+            - source: conn_postgres
+              target: ConnectionStrings__Postgres
+            - source: conn_valkey
+              target: ConnectionStrings__Valkey
+            - source: conn_rabbitmq
+              target: ConnectionStrings__RabbitMQ
+        tmpfs:
+            - /tmp:size=64m,mode=1777
+        healthcheck:
+            test: ["CMD", "dotnet", "Portfolio.dll", "--health-check"]
+            interval: 15s
+            timeout: 5s
+            retries: 3
+            start_period: 20s
+        deploy:
+            resources:
+                limits:
+                    pids: 256
+                    cpus: "1.0"
+                    memory: 512M
+        stop_grace_period: 35s
+        depends_on:
+            db-grant:
+                condition: service_completed_successfully
+            postgres:
+                condition: service_healthy
+            valkey:
+                condition: service_healthy
+            rabbitmq:
+                condition: service_healthy
+            otel-collector:
+                condition: service_started
+        networks:
+            - backend
+            - observability
+
     db-provision:
         <<: *db-provision
         depends_on:
