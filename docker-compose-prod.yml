@@ -88,8 +88,17 @@ services:
             Jwt__Keys__0__PrivateKeyPemFile: /run/secrets/jwt_es384_private_key
             Identity__Bootstrap__Accounts__0__AccessLevel: administrator
             OTEL_SERVICE_NAME: ecommerce-api
-            OTEL_RESOURCE_ATTRIBUTES: "deployment.environment.name=production,service.version=${API_VERSION:-unknown}"
+            OTEL_RESOURCE_ATTRIBUTES: "deployment.environment.name=production,service.version=${API_VERSION:-unknown},app.owner=${APP_OWNER:-team-platform}"
             OTEL_EXPORTER_OTLP_ENDPOINT: "http://otel-collector:4317"
+            OTEL_EXPORTER_OTLP_PROTOCOL: grpc
+            OTEL_PROPAGATORS: tracecontext,baggage
+            # Full head sampling: the Collector tail-samples (errors, slow traces, 10 % of the rest).
+            OTEL_TRACES_SAMPLER: parentbased_traceidratio
+            OTEL_TRACES_SAMPLER_ARG: "1.0"
+            OTEL_METRICS_EXEMPLAR_FILTER: trace_based
+            OTEL_METRIC_EXPORT_INTERVAL: "30000"
+            OTEL_ATTRIBUTE_VALUE_LENGTH_LIMIT: "2048"
+            OTEL_SEMCONV_STABILITY_OPT_IN: http,database
         # Secrets are mounted as files. Names containing "__" become configuration keys (Program.cs); the key
         # file is read from its path. Connection strings and credentials never appear in the environment.
         secrets:
