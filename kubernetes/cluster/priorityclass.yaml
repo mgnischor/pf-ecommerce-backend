@@ -1,0 +1,10 @@
+# Cluster-scoped, applied once per cluster by the platform (kubernetes/README.md): critical workloads are not preempted by
+# batch or best-effort Pods (ai/CONTAINERS.md §9.4).
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+    name: ecommerce-critical
+value: 1000000
+globalDefault: false
+preemptionPolicy: PreemptLowerPriority
+description: The API, the workers and the telemetry Collector of the e-commerce platform.
