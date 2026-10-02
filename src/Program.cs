@@ -6,8 +6,11 @@ using Microsoft.AspNetCore.Server.Kestrel.Core;
 using Microsoft.Extensions.Configuration.Json;
 using Microsoft.Extensions.FileProviders;
 using Portfolio.Catalog;
+using Portfolio.Catalog.Infrastructure;
 using Portfolio.Identity;
+using Portfolio.Identity.Infrastructure;
 using Portfolio.Inventory;
+using Portfolio.Inventory.Infrastructure;
 using Portfolio.SharedKernel.API;
 using Portfolio.SharedKernel.API.Health;
 using Portfolio.SharedKernel.Infrastructure;
@@ -53,6 +56,7 @@ builder.Services.AddValkey(builder.Configuration);
 builder.Services.AddIdentityModule(builder.Configuration, builder.Environment);
 builder.Services.AddCatalogModule(builder.Environment);
 builder.Services.AddInventoryModule(builder.Environment);
+AddMessaging(builder);
 builder
     .Services.AddControllers(options =>
     {
@@ -119,6 +123,32 @@ app.MapApiHealthChecks();
 app.MapFallback("{*path}", () => Results.NotFound()).AllowAnonymous();
 await app.RunAsync();
 return 0;
+
+// Publishing (the outbox relays) and consuming belong to the worker role (ai/CONTAINERS.md §6.1): each runs only where
+// its setting is true, and only then does the process need the broker. Elsewhere events wait in the outbox.
+static void AddMessaging(WebApplicationBuilder builder)
+{
+    var relays = builder.Configuration.GetValue<bool>($"{OutboxRelayOptions.SectionName}:Enabled");
+    var consumers = builder.Configuration.GetValue<bool>($"{RabbitMqOptions.SectionName}:ConsumersEnabled");
+    if (!relays && !consumers)
+    {
+        return;
+    }
+
+    builder.Services.AddRabbitMq(builder.Configuration);
+
+    if (relays)
+    {
+        builder.Services.AddOutboxRelay<CatalogDbContext, RabbitMqOutboxPublisher>(builder.Configuration);
+        builder.Services.AddOutboxRelay<IdentityDbContext, RabbitMqOutboxPublisher>(builder.Configuration);
+        builder.Services.AddOutboxRelay<InventoryDbContext, RabbitMqOutboxPublisher>(builder.Configuration);
+    }
+
+    if (consumers)
+    {
+        builder.Services.AddRabbitMqConsumers();
+    }
+}
 
 // Files live in configuration/ (copied next to the binaries), which the default host does not probe.
 // They are inserted right after the default appsettings sources so user secrets, environment variables
