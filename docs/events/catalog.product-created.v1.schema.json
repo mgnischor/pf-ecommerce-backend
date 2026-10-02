@@ -1,0 +1,58 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "urn:ecommerce:events:catalog.product-created:v1",
+    "title": "catalog.product-created v1",
+    "description": "A product was created. Carries its full initial snapshot so consumers never query back. Consumers must ignore properties they do not know: adding one is a backward-compatible change.",
+    "type": "object",
+    "required": ["eventId", "aggregateId", "aggregateVersion", "occurredAt", "name", "sku", "price"],
+    "properties": {
+        "eventId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Unique per occurrence; the message-id consumers deduplicate on."
+        },
+        "aggregateId": {
+            "type": "string",
+            "format": "uuid"
+        },
+        "aggregateVersion": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Version of the aggregate after the change; detects gaps and reordering."
+        },
+        "occurredAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "UTC."
+        },
+        "name": {
+            "type": "string"
+        },
+        "sku": {
+            "type": "string",
+            "minLength": 4,
+            "maxLength": 32
+        },
+        "price": {
+            "$ref": "#/$defs/money"
+        }
+    },
+    "$defs": {
+        "money": {
+            "type": "object",
+            "required": ["amount", "currency"],
+            "properties": {
+                "amount": {
+                    "type": "string",
+                    "pattern": "^-?[0-9]+\\.[0-9]{2,4}$",
+                    "description": "Decimal string; never a JSON number."
+                },
+                "currency": {
+                    "type": "string",
+                    "pattern": "^[A-Z]{3}$",
+                    "description": "ISO 4217."
+                }
+            }
+        }
+    }
+}
