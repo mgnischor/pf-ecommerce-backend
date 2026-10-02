@@ -1,0 +1,35 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# 2 of 3: roles, schemas, migrations and grants for this environment. Applied after the foundation and BEFORE the workloads;
+# the pipeline waits for the Job (kubernetes/README.md).
+namespace: ecommerce-production
+
+resources:
+    - ../../../migrations
+
+labels:
+    - pairs:
+          app.kubernetes.io/part-of: ecommerce
+          app.kubernetes.io/managed-by: kustomize
+          app.kubernetes.io/version: 0.0.0 # set by the pipeline to the release being deployed
+      includeSelectors: false
+      includeTemplates: true
+
+images:
+    - name: registry.example.com/ecommerce-migrations
+      digest: sha256:0000000000000000000000000000000000000000000000000000000000000000 # set by the pipeline: the digest of the image built and signed for this release
+
+configMapGenerator:
+    - name: database-connection
+      behavior: merge
+      literals:
+          - PGHOST=postgres.production.example.internal # the managed instance endpoint (terraform output)
+          - PGSSLMODE=require
+
+patches:
+    - target: { kind: NetworkPolicy, name: db-release-egress }
+      patch: |-
+          - op: replace
+            path: /spec/egress/0/to/0/ipBlock/cidr
+            value: 10.30.0.0/16
