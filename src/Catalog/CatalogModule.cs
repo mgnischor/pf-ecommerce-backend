@@ -18,6 +18,7 @@ internal static class CatalogModule
 
         services.AddModuleDbContext<CatalogDbContext>(CatalogDbContext.SchemaName, environment);
         services.AddScoped<IProductRepository, EfProductRepository>();
+        services.AddSingleton<IDomainEventSubscriber, CatalogMetricsSubscriber>();
 
         services.AddUseCase<CatalogDbContext, CreateProductHandler>();
         services.AddUseCase<CatalogDbContext, ChangeProductPriceHandler>();
