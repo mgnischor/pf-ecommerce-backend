@@ -1,5 +1,8 @@
+using System.Diagnostics;
+using System.Diagnostics.Metrics;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
+using Portfolio.SharedKernel.Telemetry;
 
 namespace Portfolio.SharedKernel.Infrastructure;
 
@@ -9,6 +12,8 @@ namespace Portfolio.SharedKernel.Infrastructure;
 /// number of instances can run side by side and no transaction stays open across the broker call. A row whose
 /// publisher failed, or whose instance died, becomes claimable again when its lease expires.
 /// Ordering is per poll, not guaranteed across instances: consumers use <see cref="OutboxMessage.AggregateVersion"/>.
+/// Each publication is a <c>PRODUCER</c> span that continues the trace stored with the event (ai/OBSERVABILITY.md §6.4), not
+/// one started by the polling loop, so a request and the message it caused are one trace.
 /// </summary>
 /// <typeparam name="TContext">The context whose outbox is relayed.</typeparam>
 internal sealed class OutboxRelay<TContext>(
@@ -16,10 +21,19 @@ internal sealed class OutboxRelay<TContext>(
     IOutboxPublisher publisher,
     TimeProvider timeProvider,
     IOptions<OutboxRelayOptions> options,
+    IMeterFactory meterFactory,
     ILogger<OutboxRelay<TContext>> logger
 ) : BackgroundService
     where TContext : ModuleDbContext
 {
+    private readonly Histogram<double> _publishDuration = meterFactory
+        .Create(TelemetryNames.OutboxMeter)
+        .CreateHistogram<double>(
+            "app.outbox.publish.duration",
+            unit: "s",
+            description: "Duration of one outbox publication, by outcome (success or failure)."
+        );
+
     /// <inheritdoc />
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -60,6 +74,10 @@ internal sealed class OutboxRelay<TContext>(
 
         foreach (var message in claimed)
         {
+            using var activity = StartPublishActivity(message, context.Schema);
+            var started = Stopwatch.GetTimestamp();
+            var outcome = "success";
+
             try
             {
                 await publisher.PublishAsync(message, cancellationToken);
@@ -72,13 +90,48 @@ internal sealed class OutboxRelay<TContext>(
             catch (Exception exception)
             {
                 // Any publisher failure keeps the message pending; only the type is stored and logged.
+                outcome = "failure";
+                activity?.SetStatus(ActivityStatusCode.Error);
+                activity?.SetTag("error.type", exception.GetType().Name);
                 message.MarkFailed(exception.GetType().Name);
                 OutboxLog.PublishFailed(logger, typeof(TContext).Name, message.Attempts, exception.GetType().Name);
+            }
+            finally
+            {
+                _publishDuration.Record(
+                    Stopwatch.GetElapsedTime(started).TotalSeconds,
+                    new KeyValuePair<string, object?>(TelemetryNames.BoundedContext, context.Schema),
+                    new KeyValuePair<string, object?>("app.outcome", outcome)
+                );
             }
         }
 
         await context.SaveChangesAsync(CancellationToken.None);
         return claimed.Count;
+    }
+
+    private static Activity? StartPublishActivity(OutboxMessage message, string schema)
+    {
+        // Continue the trace of the request that raised the event; without a stored context this is a new root.
+        var parent = default(ActivityContext);
+        if (
+            message.TraceParent is not null
+            && !ActivityContext.TryParse(message.TraceParent, message.TraceState, isRemote: true, out parent)
+        )
+        {
+            parent = default; // A malformed stored context is ignored: the span starts a new trace.
+        }
+
+        var activity = OutboxTracing.Source.StartActivity(
+            $"publish {message.Type[(message.Type.LastIndexOf('.') + 1)..]}",
+            ActivityKind.Producer,
+            parent
+        );
+        activity?.SetTag("messaging.operation.type", "publish");
+        activity?.SetTag("messaging.message.id", message.Id.ToString("D"));
+        activity?.SetTag(TelemetryNames.BoundedContext, schema);
+        activity?.SetTag("app.outbox.attempt", message.Attempts);
+        return activity;
     }
 
     private async Task<List<OutboxMessage>> ClaimAsync(TContext context, CancellationToken cancellationToken)
@@ -105,7 +158,8 @@ internal sealed class OutboxRelay<TContext>(
                 .OutboxMessages.FromSql(
                     $"""
                     SELECT id, type, payload, aggregate_id, aggregate_version, occurred_at,
-                           correlation_id, causation_id, processed_at, attempts, locked_until, last_error
+                           correlation_id, causation_id, trace_parent, trace_state,
+                           processed_at, attempts, locked_until, last_error
                     FROM outbox_messages
                     WHERE processed_at IS NULL
                       AND attempts < {settings.MaxAttempts}
