@@ -138,9 +138,12 @@ dotnet user-secrets set "Identity:Bootstrap:Accounts:0:AccessLevel" "developer" 
 1. **Accounts and refresh tokens live in PostgreSQL** (schema `identity`, `docs/database.md`). The `version` column
    arbitrates concurrent refresh-token rotation across instances: of two simultaneous refreshes of one token, one
    commits and the other is refused (`409`, `CONCURRENT_UPDATE`); two sessions never come out of one token. Each
-   authenticated request reads the account to validate the token version, which makes revocation immediate and costs
-   one query per request until the Valkey cache exists.
-2. **The `jti` blocklist is in-memory**; the Valkey-backed store replaces it.
+   authenticated request reads the account to validate the token version, which makes revocation immediate. The account
+   state is cached in Valkey for 30 s and evicted by domain events after commit (`docs/caching.md`), so the common case
+   costs no query and deactivation still takes effect at once.
+2. **The `jti` blocklist lives in Valkey** with a TTL equal to the remaining token life. It fails closed by default: if
+   Valkey cannot be read, access tokens are refused (`Valkey:RevocationCheckFailureMode`, `Allow` is an explicit
+   availability trade-off). It shares an instance with the caches; move it to a `noeviction` instance before memory gets tight.
 3. **Client IP for rate limiting** is the socket address; behind a proxy, forwarded headers must be configured with
    trusted proxies before the limits are meaningful.
 4. **No MFA, e-mail verification, or password reset yet.** `ai/SECURITY.md §2.1` (A07) requires MFA for staff accounts;
