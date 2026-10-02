@@ -1,0 +1,105 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# 3 of 3: the application, RabbitMQ and the Collector for this environment. Applied after the foundation and after the
+# database release Job completed.
+namespace: ecommerce-dev
+
+resources:
+    - ../../../base
+
+labels:
+    - pairs:
+          app.kubernetes.io/version: 0.0.0 # set by the pipeline to the release being deployed
+      includeSelectors: false
+      includeTemplates: true
+
+images:
+    - name: registry.example.com/ecommerce-api
+      digest: sha256:0000000000000000000000000000000000000000000000000000000000000000 # set by the pipeline: the digest of the image built, scanned and signed for this release
+
+configMapGenerator:
+    - name: ecommerce-config
+      behavior: merge
+      literals:
+          - AllowedHosts=api.dev.example.com
+          - Jwt__Issuer=https://api.dev.example.com
+          - OTEL_RESOURCE_ATTRIBUTES_STATIC=deployment.environment.name=development,app.owner=team-platform
+
+patches:
+    # Public host name, TLS secret and certificate issuer.
+    - target: { kind: Ingress, name: ecommerce-api }
+      patch: |-
+          - op: replace
+            path: /spec/tls/0/hosts/0
+            value: api.dev.example.com
+          - op: replace
+            path: /spec/rules/0/host
+            value: api.dev.example.com
+          - op: add
+            path: /metadata/annotations/cert-manager.io~1cluster-issuer
+            value: letsencrypt-staging
+    # Scale.
+    - target: { kind: Deployment, name: ecommerce-api }
+      patch: |-
+          - op: replace
+            path: /spec/replicas
+            value: 2
+    - target: { kind: Deployment, name: ecommerce-worker }
+      patch: |-
+          - op: replace
+            path: /spec/replicas
+            value: 1
+    - target: { kind: HorizontalPodAutoscaler, name: ecommerce-api }
+      patch: |-
+          - op: replace
+            path: /spec/minReplicas
+            value: 2
+          - op: replace
+            path: /spec/maxReplicas
+            value: 3
+    - target: { kind: ScaledObject, name: ecommerce-worker }
+      patch: |-
+          - op: replace
+            path: /spec/minReplicaCount
+            value: 1
+          - op: replace
+            path: /spec/maxReplicaCount
+            value: 2
+    # One worker replica: a budget of 50% would block every node drain.
+    - target: { kind: PodDisruptionBudget, name: ecommerce-worker }
+      patch: |-
+          $patch: delete
+          apiVersion: policy/v1
+          kind: PodDisruptionBudget
+          metadata:
+              name: ecommerce-worker
+    # RabbitMQ: size and an SSD-backed class (gp3 on AWS).
+    - target: { kind: RabbitmqCluster, name: ecommerce-rabbitmq }
+      patch: |-
+          - op: replace
+            path: /spec/replicas
+            value: 1
+          - op: replace
+            path: /spec/persistence/storage
+            value: 10Gi
+          - op: add
+            path: /spec/persistence/storageClassName
+            value: gp3
+    # KEDA runs in its own namespace: fully qualify the broker host.
+    - target: { kind: ExternalSecret, name: ecommerce-keda-rabbitmq }
+      patch: |-
+          - op: replace
+            path: /spec/target/template/data/host
+            value: "amqp://{{ .rabbitmq_username | urlquery }}:{{ .rabbitmq_password | urlquery }}@ecommerce-rabbitmq.ecommerce-dev.svc.cluster.local:5672"
+    # Network policies: the VPC range of this environment (managed PostgreSQL and Valkey) and the API server range.
+    - target: { kind: NetworkPolicy, name: app-egress }
+      patch: |-
+          - op: replace
+            path: /spec/egress/0/to/0/ipBlock/cidr
+            value: 10.10.0.0/16
+    - target: { kind: NetworkPolicy, name: rabbitmq-egress }
+      patch: |-
+          - op: replace
+            path: /spec/egress/1/to/0/ipBlock/cidr
+            value: 10.10.0.0/16
