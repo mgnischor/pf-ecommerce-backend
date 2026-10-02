@@ -1,0 +1,46 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# The application: API and worker roles, their Service, Ingress, autoscaling, disruption budgets, secrets and network policies.
+# Overlays set the namespace, the image digests, the host and the environment values (kubernetes/README.md).
+resources:
+    - serviceaccount.yaml
+    - api-deployment.yaml
+    - api-service.yaml
+    - api-hpa.yaml
+    - worker-deployment.yaml
+    - worker-scaledobject.yaml
+    - pod-disruption-budgets.yaml
+    - ingress.yaml
+    - external-secrets.yaml
+    - network-policies.yaml
+
+# Non-sensitive settings only (ai/CONTAINERS.md §6.4). The name carries a content hash and the object is immutable, so a
+# change creates a new ConfigMap and rolls the Deployments (the generator rewrites every reference).
+generatorOptions:
+    immutable: true
+
+configMapGenerator:
+    - name: ecommerce-config
+      literals:
+          - ASPNETCORE_ENVIRONMENT=Production
+          - Hosting__ShutdownTimeout=00:00:25
+          # Replaced by every overlay: the public host name(s) and the "iss" claim of every access token.
+          - AllowedHosts=api.example.com
+          - Jwt__Issuer=https://api.example.com
+          - Jwt__ActiveKeyId=key-1
+          - Jwt__Keys__0__Id=key-1
+          - Jwt__Keys__0__PrivateKeyPemFile=/run/secrets/jwt_es384_private_key
+          - Identity__Bootstrap__Accounts__0__AccessLevel=administrator
+          # Telemetry: the standard OTEL_* variables only (ai/OBSERVABILITY.md §16).
+          - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4317
+          - OTEL_EXPORTER_OTLP_PROTOCOL=grpc
+          - OTEL_PROPAGATORS=tracecontext,baggage
+          - OTEL_TRACES_SAMPLER=parentbased_traceidratio
+          - OTEL_TRACES_SAMPLER_ARG=1.0
+          - OTEL_METRICS_EXEMPLAR_FILTER=trace_based
+          - OTEL_METRIC_EXPORT_INTERVAL=30000
+          - OTEL_ATTRIBUTE_VALUE_LENGTH_LIMIT=2048
+          - OTEL_SEMCONV_STABILITY_OPT_IN=http,database
+          # Environment and owner; the Pod adds service.version and the k8s.* attributes.
+          - OTEL_RESOURCE_ATTRIBUTES_STATIC=deployment.environment.name=production,app.owner=team-platform
