@@ -181,5 +181,6 @@ internal sealed class User : AggregateRoot
 
         TokenVersion++;
         MarkUpdated(timeProvider);
+        AddDomainEvent(UserTokensRevoked.For(this));
     }
 }
