@@ -18,6 +18,7 @@ internal static class InventoryModule
 
         services.AddModuleDbContext<InventoryDbContext>(InventoryDbContext.SchemaName, environment);
         services.AddScoped<IInventoryItemRepository, EfInventoryItemRepository>();
+        services.AddSingleton<IDomainEventSubscriber, InventoryMetricsSubscriber>();
 
         services.AddUseCase<InventoryDbContext, OpenInventoryItemHandler>();
         services.AddUseCase<InventoryDbContext, AdjustStockHandler>();
