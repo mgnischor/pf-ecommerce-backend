@@ -13,6 +13,12 @@ internal sealed class OutboxMessage
     /// <summary>Longest stored failure description.</summary>
     public const int MaxErrorLength = 200;
 
+    /// <summary>Length of a W3C <c>traceparent</c> (<c>00-{32}-{16}-{2}</c>).</summary>
+    public const int TraceParentLength = 55;
+
+    /// <summary>Longest stored <c>tracestate</c>; a longer one is dropped (it is only a hint) rather than failing the commit.</summary>
+    public const int MaxTraceStateLength = 512;
+
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
     /// <summary>The event identifier: the primary key, so one event can never be queued twice.</summary>
@@ -39,6 +45,12 @@ internal sealed class OutboxMessage
     /// <summary>Identifier of the message that caused this event, for events raised while handling another message.</summary>
     public string? CausationId { get; private set; }
 
+    /// <summary>W3C <c>traceparent</c> of the request that raised the event, so the relay continues that trace (ai/OBSERVABILITY.md §6.4).</summary>
+    public string? TraceParent { get; private set; }
+
+    /// <summary>W3C <c>tracestate</c> that travels with <see cref="TraceParent"/>, when there was one.</summary>
+    public string? TraceState { get; private set; }
+
     /// <summary>UTC instant the publisher confirmed the event, or <c>null</c> while pending.</summary>
     public DateTimeOffset? ProcessedAt { get; private set; }
 
@@ -61,7 +73,15 @@ internal sealed class OutboxMessage
     /// <param name="domainEvent">The event; serialized by its runtime type.</param>
     /// <param name="correlationId">Trace identifier of the current request, if any.</param>
     /// <param name="causationId">Identifier of the message being handled, if any.</param>
-    public static OutboxMessage From(IDomainEvent domainEvent, string? correlationId, string? causationId)
+    /// <param name="traceParent">W3C <c>traceparent</c> of the current request, if any.</param>
+    /// <param name="traceState">W3C <c>tracestate</c> of the current request, if any.</param>
+    public static OutboxMessage From(
+        IDomainEvent domainEvent,
+        string? correlationId,
+        string? causationId,
+        string? traceParent = null,
+        string? traceState = null
+    )
     {
         ArgumentNullException.ThrowIfNull(domainEvent);
 
@@ -76,6 +96,8 @@ internal sealed class OutboxMessage
             OccurredAt = domainEvent.OccurredAt,
             CorrelationId = correlationId,
             CausationId = causationId,
+            TraceParent = traceParent,
+            TraceState = traceState is { Length: > MaxTraceStateLength } ? null : traceState,
         };
     }
 
