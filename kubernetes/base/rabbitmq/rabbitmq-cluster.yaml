@@ -1,0 +1,85 @@
+# RabbitMQ through the RabbitMQ Cluster Operator (ai/CONTAINERS.md §7.4: operators and StatefulSets with PVCs for stateful
+# services, never a plain Deployment). The operator must be installed in the cluster (kubernetes/README.md, prerequisites).
+# Production prefers a managed broker; if one is used, delete this directory from the overlay and point
+# ConnectionStrings__RabbitMQ at it.
+#
+# The image is the one Compose runs, pinned by digest. It is the Alpine variant, whose "rabbitmq" user is 100:101, so the
+# Pod security context below names that user instead of the operator default (999).
+apiVersion: rabbitmq.com/v1beta1
+kind: RabbitmqCluster
+metadata:
+    name: ecommerce-rabbitmq
+    labels:
+        app.kubernetes.io/component: broker
+spec:
+    replicas: 3
+    image: rabbitmq:4.3.6-management-alpine@sha256:95312f53d5b1115d410f1a56fba03a6325e3e03b4c60a845237bd345f341a097
+    # The default user comes from the secret manager, not from a Secret the operator generates (never committed).
+    secretBackend:
+        externalSecret:
+            name: ecommerce-rabbitmq-default-user
+    persistence:
+        # storageClassName is set per overlay: an SSD-backed class (ai/CONTAINERS.md §7.4).
+        storage: 20Gi
+    resources:
+        requests:
+            cpu: 500m
+            memory: 1Gi
+            ephemeral-storage: 500Mi
+        limits:
+            cpu: "1"
+            memory: 1Gi
+            ephemeral-storage: 1Gi
+    rabbitmq:
+        additionalConfig: |
+            cluster_partition_handling = pause_minority
+            vm_memory_high_watermark.relative = 0.7
+            disk_free_limit.absolute = 2GB
+    # Long enough to drain connections, short of the operator default of one week.
+    terminationGracePeriodSeconds: 300
+    affinity:
+        podAntiAffinity:
+            requiredDuringSchedulingIgnoredDuringExecution:
+                - topologyKey: kubernetes.io/hostname
+                  labelSelector:
+                      matchLabels:
+                          app.kubernetes.io/name: ecommerce-rabbitmq
+    override:
+        statefulSet:
+            spec:
+                template:
+                    spec:
+                        automountServiceAccountToken: true # peer discovery reads the Endpoints of its own cluster
+                        topologySpreadConstraints:
+                            - maxSkew: 1
+                              topologyKey: topology.kubernetes.io/zone
+                              whenUnsatisfiable: ScheduleAnyway
+                              labelSelector:
+                                  matchLabels:
+                                      app.kubernetes.io/name: ecommerce-rabbitmq
+                        securityContext:
+                            runAsNonRoot: true
+                            runAsUser: 100
+                            runAsGroup: 101
+                            fsGroup: 101
+                            seccompProfile:
+                                type: RuntimeDefault
+                        initContainers:
+                            - name: setup-container
+                              securityContext:
+                                  allowPrivilegeEscalation: false
+                                  runAsNonRoot: true
+                                  runAsUser: 100
+                                  runAsGroup: 101
+                                  capabilities:
+                                      drop: ["ALL"]
+                        containers:
+                            - name: rabbitmq
+                              # readOnlyRootFilesystem is not set: docs/container-exceptions.md, EX-005.
+                              securityContext:
+                                  allowPrivilegeEscalation: false
+                                  runAsNonRoot: true
+                                  runAsUser: 100
+                                  runAsGroup: 101
+                                  capabilities:
+                                      drop: ["ALL"]
