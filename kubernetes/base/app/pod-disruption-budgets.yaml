@@ -1,0 +1,26 @@
+# Every production Deployment with replicas >= 2 has a budget (ai/CONTAINERS.md §6.6).
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+    name: ecommerce-api
+    labels:
+        app.kubernetes.io/name: ecommerce-api
+        app.kubernetes.io/component: api
+spec:
+    minAvailable: "50%"
+    selector:
+        matchLabels:
+            app.kubernetes.io/name: ecommerce-api
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+    name: ecommerce-worker
+    labels:
+        app.kubernetes.io/name: ecommerce-worker
+        app.kubernetes.io/component: worker
+spec:
+    minAvailable: "50%"
+    selector:
+        matchLabels:
+            app.kubernetes.io/name: ecommerce-worker
