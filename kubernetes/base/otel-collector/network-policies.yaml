@@ -1,0 +1,40 @@
+# The Collector accepts OTLP from the application only, and sends to the observability backends only
+# (ai/CONTAINERS.md §7.3). Probes come from the kubelet and are not subject to the policy.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+    name: otel-collector-ingress
+spec:
+    podSelector:
+        matchLabels:
+            app.kubernetes.io/name: otel-collector
+    policyTypes: [Ingress]
+    ingress:
+        - from:
+              - podSelector:
+                    matchExpressions:
+                        - key: app.kubernetes.io/name
+                          operator: In
+                          values: [ecommerce-api, ecommerce-worker]
+          ports:
+              - { protocol: TCP, port: 4317 }
+              - { protocol: TCP, port: 4318 }
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+    name: otel-collector-egress
+spec:
+    podSelector:
+        matchLabels:
+            app.kubernetes.io/name: otel-collector
+    policyTypes: [Egress]
+    egress:
+        - to:
+              - namespaceSelector:
+                    matchLabels:
+                        kubernetes.io/metadata.name: observability
+          ports:
+              - { protocol: TCP, port: 9090 } # Prometheus OTLP receiver
+              - { protocol: TCP, port: 3100 } # Loki OTLP ingest
+              - { protocol: TCP, port: 4317 } # Tempo OTLP gRPC
