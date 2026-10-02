@@ -100,8 +100,8 @@ public sealed partial class ContainerConventionTests
     }
 
     [Theory]
-    [InlineData("docker-compose-dev.yml", 5)]
-    [InlineData("docker-compose-prod.yml", 9)]
+    [InlineData("docker-compose-dev.yml", 6)]
+    [InlineData("docker-compose-prod.yml", 10)]
     public void Compose_should_limit_resources_and_define_a_security_context_for_every_service(
         string file,
         int services
@@ -120,7 +120,7 @@ public sealed partial class ContainerConventionTests
     {
         var text = Read("docker-compose-prod.yml");
 
-        CountOf(text, @"(?m)^\s+<<:\s+\*hardening").ShouldBe(9);
+        CountOf(text, @"(?m)^\s+<<:\s+\*hardening").ShouldBe(10);
         text.ShouldContain("read_only: true");
         text.ShouldContain("cap_drop: [ALL]");
         text.ShouldContain("restart: unless-stopped");
