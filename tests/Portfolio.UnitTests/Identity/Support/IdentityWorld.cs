@@ -1,6 +1,5 @@
 using Portfolio.Identity.Application;
 using Portfolio.Identity.Domain;
-using Portfolio.Identity.Infrastructure;
 using Portfolio.SharedKernel.Domain;
 using Portfolio.UnitTests.Support;
 
