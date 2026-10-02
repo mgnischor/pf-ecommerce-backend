@@ -1,0 +1,17 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Everything that runs in an environment's namespace. The database release Job is deliberately NOT here: it is applied and
+# awaited before this kustomization (kubernetes/migrations). Backing services: PostgreSQL and Valkey are managed services
+# provisioned by infrastructure/; RabbitMQ and the Collector run here.
+resources:
+    - app
+    - rabbitmq
+    - otel-collector
+
+labels:
+    - pairs:
+          app.kubernetes.io/part-of: ecommerce
+          app.kubernetes.io/managed-by: kustomize
+      includeSelectors: false
+      includeTemplates: true
