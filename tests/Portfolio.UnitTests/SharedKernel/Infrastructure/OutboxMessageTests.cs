@@ -38,7 +38,7 @@ public sealed class OutboxMessageTests
     }
 
     [Fact]
-    public void Should_serialize_the_payload_as_camel_case_json_with_money_as_decimal_and_currency()
+    public void Should_serialize_the_payload_as_camel_case_json_with_money_as_a_decimal_string_and_currency()
     {
         var message = OutboxMessage.From(Event(), null, null);
 
@@ -46,7 +46,8 @@ public sealed class OutboxMessageTests
         var root = payload.RootElement;
         root.GetProperty("sku").GetString().ShouldBe("CAF-600-PRT");
         root.GetProperty("aggregateVersion").GetInt32().ShouldBe(3);
-        root.GetProperty("price").GetProperty("amount").GetDecimal().ShouldBe(189.9m);
+        // A decimal string, never a JSON number (ai/API_CONTRACTS.md §3): no consumer rounds it through a binary float.
+        root.GetProperty("price").GetProperty("amount").GetString().ShouldBe("189.90");
         root.GetProperty("price").GetProperty("currency").GetString().ShouldBe("BRL");
     }
 
