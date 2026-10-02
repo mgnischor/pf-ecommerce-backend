@@ -1,0 +1,55 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "urn:ecommerce:events:inventory.stock-released:v1",
+    "title": "inventory.stock-released v1",
+    "description": "Reserved units were released. Consumers must ignore properties they do not know: adding one is a backward-compatible change.",
+    "type": "object",
+    "required": [
+        "eventId",
+        "aggregateId",
+        "aggregateVersion",
+        "occurredAt",
+        "sku",
+        "quantity",
+        "reserved",
+        "available"
+    ],
+    "properties": {
+        "eventId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Unique per occurrence; the message-id consumers deduplicate on."
+        },
+        "aggregateId": {
+            "type": "string",
+            "format": "uuid"
+        },
+        "aggregateVersion": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Version of the aggregate after the change; detects gaps and reordering."
+        },
+        "occurredAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "UTC."
+        },
+        "sku": {
+            "type": "string",
+            "minLength": 4,
+            "maxLength": 32
+        },
+        "quantity": {
+            "type": "integer",
+            "minimum": 1
+        },
+        "reserved": {
+            "type": "integer",
+            "minimum": 0
+        },
+        "available": {
+            "type": "integer",
+            "minimum": 0
+        }
+    }
+}
