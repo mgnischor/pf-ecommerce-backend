@@ -1,0 +1,131 @@
+# Prepares the database for a release (ai/DATABASE.md §6.1, ai/CONTAINERS.md §6.7). One Job whose containers run in order, the
+# same chain Compose runs (docker-compose-prod.yml):
+#
+#   1. provision      roles and schemas, as the instance admin (database/provision.sh)
+#   2. migrate-*      one EF Core migrations bundle per bounded context, as app_migrator (DDL)
+#   3. grant          (the main container) the same provisioning again, so app_runtime and app_readonly are granted on the
+#                     tables the migrations just created and denied on the migration history
+#
+# It runs BEFORE the new Deployments roll out and never inside the API: the pipeline applies this kustomization, waits for
+# `condition=complete`, and only then lets the workloads sync (kubernetes/README.md). Every step is idempotent, so a retry
+# (backoffLimit) starts again from the first step safely. A Job spec is immutable: delete the finished Job before applying a
+# new one; the Argo CD hook policy below does it for you, the Flux annotation recreates it.
+apiVersion: batch/v1
+kind: Job
+metadata:
+    name: ecommerce-db-release
+    labels:
+        app.kubernetes.io/name: ecommerce-db-release
+        app.kubernetes.io/component: migrations
+    annotations:
+        argocd.argoproj.io/hook: PreSync
+        argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+        kustomize.toolkit.fluxcd.io/force: enabled
+spec:
+    backoffLimit: 3
+    activeDeadlineSeconds: 1800 # above app_migrator statement_timeout (15 min)
+    ttlSecondsAfterFinished: 3600
+    template:
+        metadata:
+            labels:
+                app.kubernetes.io/name: ecommerce-db-release
+                app.kubernetes.io/component: migrations
+        spec:
+            restartPolicy: Never
+            serviceAccountName: ecommerce-db-release
+            automountServiceAccountToken: false
+            securityContext:
+                runAsNonRoot: true
+                seccompProfile:
+                    type: RuntimeDefault
+            initContainers:
+                - name: provision
+                  image: postgres:18.6-alpine3.24@sha256:77f585114c32fbca283dc835b0596f4e52b51b4c6662d7810b2f4084f60a1873
+                  command: ["sh", "/provision/provision.sh"]
+                  envFrom:
+                      - configMapRef:
+                            name: database-connection
+                  securityContext: &container-security
+                      allowPrivilegeEscalation: false
+                      readOnlyRootFilesystem: true
+                      runAsUser: 70
+                      runAsGroup: 70
+                      capabilities:
+                          drop: ["ALL"]
+                  resources: &job-resources
+                      requests:
+                          cpu: 100m
+                          memory: 128Mi
+                          ephemeral-storage: 50Mi
+                      limits:
+                          cpu: 500m
+                          memory: 256Mi
+                          ephemeral-storage: 100Mi
+                  volumeMounts:
+                      - { name: provisioning, mountPath: /provision, readOnly: true }
+                      - { name: provisioning-secrets, mountPath: /run/secrets, readOnly: true }
+                      - { name: tmp, mountPath: /tmp }
+                - name: migrate-identity
+                  image: registry.example.com/ecommerce-migrations
+                  command: ["/migrations/migrate-identity"]
+                  env: &migrate-env
+                      - name: PF_DESIGN_TIME_CONNECTION_FILE
+                        value: /run/secrets/conn_postgres_migrator
+                      # A single-file bundle unpacks its native libraries; the root filesystem is read-only, /tmp is not.
+                      - name: DOTNET_BUNDLE_EXTRACT_BASE_DIR
+                        value: /tmp
+                  securityContext: &migrate-security
+                      allowPrivilegeEscalation: false
+                      readOnlyRootFilesystem: true
+                      runAsUser: 1654
+                      runAsGroup: 1654
+                      capabilities:
+                          drop: ["ALL"]
+                  resources: *job-resources
+                  volumeMounts: &migrate-mounts
+                      - { name: migrator-secrets, mountPath: /run/secrets, readOnly: true }
+                      - { name: tmp, mountPath: /tmp }
+                - name: migrate-catalog
+                  image: registry.example.com/ecommerce-migrations
+                  command: ["/migrations/migrate-catalog"]
+                  env: *migrate-env
+                  securityContext: *migrate-security
+                  resources: *job-resources
+                  volumeMounts: *migrate-mounts
+                - name: migrate-inventory
+                  image: registry.example.com/ecommerce-migrations
+                  command: ["/migrations/migrate-inventory"]
+                  env: *migrate-env
+                  securityContext: *migrate-security
+                  resources: *job-resources
+                  volumeMounts: *migrate-mounts
+            containers:
+                - name: grant
+                  image: postgres:18.6-alpine3.24@sha256:77f585114c32fbca283dc835b0596f4e52b51b4c6662d7810b2f4084f60a1873
+                  command: ["sh", "/provision/provision.sh"]
+                  envFrom:
+                      - configMapRef:
+                            name: database-connection
+                  securityContext: *container-security
+                  resources: *job-resources
+                  volumeMounts:
+                      - { name: provisioning, mountPath: /provision, readOnly: true }
+                      - { name: provisioning-secrets, mountPath: /run/secrets, readOnly: true }
+                      - { name: tmp, mountPath: /tmp }
+            volumes:
+                - name: provisioning
+                  configMap:
+                      name: database-provisioning
+                      defaultMode: 0555
+                - name: provisioning-secrets
+                  secret:
+                      secretName: ecommerce-db-provisioning
+                      defaultMode: 0444
+                - name: migrator-secrets
+                  secret:
+                      secretName: ecommerce-db-migrator
+                      defaultMode: 0444
+                - name: tmp
+                  emptyDir:
+                      medium: Memory
+                      sizeLimit: 64Mi
