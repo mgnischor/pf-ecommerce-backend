@@ -1,0 +1,69 @@
+# RabbitMQ is reachable only by the application, KEDA (queue depth) and the monitoring/operator namespaces
+# (ai/CONTAINERS.md §7.3). The default-deny and DNS policies of the application apply to these Pods too.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+    name: rabbitmq-ingress
+spec:
+    podSelector:
+        matchLabels:
+            app.kubernetes.io/name: ecommerce-rabbitmq
+    policyTypes: [Ingress]
+    ingress:
+        - from:
+              - podSelector:
+                    matchExpressions:
+                        - key: app.kubernetes.io/name
+                          operator: In
+                          values: [ecommerce-api, ecommerce-worker]
+              - namespaceSelector:
+                    matchLabels:
+                        kubernetes.io/metadata.name: keda
+          ports:
+              - { protocol: TCP, port: 5672 }
+        # Cluster membership: Erlang port mapper and inter-node traffic, between the broker Pods themselves.
+        - from:
+              - podSelector:
+                    matchLabels:
+                        app.kubernetes.io/name: ecommerce-rabbitmq
+          ports:
+              - { protocol: TCP, port: 4369 }
+              - { protocol: TCP, port: 25672 }
+              - { protocol: TCP, port: 5672 }
+        # Prometheus plugin metrics, and the management calls of the operator.
+        - from:
+              - namespaceSelector:
+                    matchLabels:
+                        kubernetes.io/metadata.name: observability
+          ports:
+              - { protocol: TCP, port: 15692 }
+        - from:
+              - namespaceSelector:
+                    matchLabels:
+                        kubernetes.io/metadata.name: rabbitmq-system
+          ports:
+              - { protocol: TCP, port: 15672 }
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+    name: rabbitmq-egress
+spec:
+    podSelector:
+        matchLabels:
+            app.kubernetes.io/name: ecommerce-rabbitmq
+    policyTypes: [Egress]
+    egress:
+        - to:
+              - podSelector:
+                    matchLabels:
+                        app.kubernetes.io/name: ecommerce-rabbitmq
+          ports:
+              - { protocol: TCP, port: 4369 }
+              - { protocol: TCP, port: 25672 }
+        # Peer discovery asks the Kubernetes API. The CIDR is the API server (patched per overlay); never 0.0.0.0/0.
+        - to:
+              - ipBlock:
+                    cidr: 10.0.0.0/16
+          ports:
+              - { protocol: TCP, port: 443 }
