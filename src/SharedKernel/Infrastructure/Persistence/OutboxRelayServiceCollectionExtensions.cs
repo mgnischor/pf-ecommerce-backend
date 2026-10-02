@@ -1,3 +1,5 @@
+using Microsoft.Extensions.DependencyInjection.Extensions;
+
 namespace Portfolio.SharedKernel.Infrastructure;
 
 /// <summary>Registration of the relay.</summary>
@@ -22,7 +24,7 @@ internal static class OutboxRelayServiceCollectionExtensions
         ArgumentNullException.ThrowIfNull(configuration);
 
         services.AddOptions<OutboxRelayOptions>().Bind(configuration.GetSection(OutboxRelayOptions.SectionName));
-        services.AddSingleton<IOutboxPublisher, TPublisher>();
+        services.TryAddSingleton<IOutboxPublisher, TPublisher>();
         return services.AddHostedService<OutboxRelay<TContext>>();
     }
 }
