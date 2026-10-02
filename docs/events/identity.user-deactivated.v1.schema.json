@@ -1,0 +1,29 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "urn:ecommerce:events:identity.user-deactivated:v1",
+    "title": "identity.user-deactivated v1",
+    "description": "An account was deactivated. Consumers must ignore properties they do not know: adding one is a backward-compatible change.",
+    "type": "object",
+    "required": ["eventId", "aggregateId", "aggregateVersion", "occurredAt"],
+    "properties": {
+        "eventId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Unique per occurrence; the message-id consumers deduplicate on."
+        },
+        "aggregateId": {
+            "type": "string",
+            "format": "uuid"
+        },
+        "aggregateVersion": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Version of the aggregate after the change; detects gaps and reordering."
+        },
+        "occurredAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "UTC."
+        }
+    }
+}
