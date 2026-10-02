@@ -8,8 +8,8 @@ namespace Portfolio.Inventory.Application;
 /// Opens the inventory item of a SKU (BR-INV-008). Retrying the same request is safe: the existence check turns a
 /// replay into a conflict instead of a duplicate, and the unique index on <c>sku</c> closes the race between two
 /// concurrent requests. Whether the SKU exists in the catalog is not checked here: the contexts only talk through
-/// events, so the item is expected to be opened by the catalog's <c>ProductCreated</c> integration event once the
-/// messaging infrastructure exists.
+/// events, so an item is also opened by the catalog's <c>ProductCreated</c> integration event
+/// (<see cref="OpenInventoryItemOnProductCreatedHandler"/>).
 /// </summary>
 internal sealed class OpenInventoryItemHandler(
     IInventoryItemRepository items,
