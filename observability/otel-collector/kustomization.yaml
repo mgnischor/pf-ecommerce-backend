@@ -1,0 +1,12 @@
+# Lets kubernetes/base/otel-collector use config.yaml as the single source of the pipeline (redaction, sampling, routing)
+# instead of a copy. A directory used as a Kustomize resource may sit outside the referencing root; a file may not.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+generatorOptions:
+    immutable: true
+
+configMapGenerator:
+    - name: otel-collector-config
+      files:
+          - config.yaml
