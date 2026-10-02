@@ -17,7 +17,7 @@ internal static class TelemetryNames
     /// <summary>Activity source of the cache boundary.</summary>
     public const string CacheSource = Prefix + ".Cache";
 
-    /// <summary>Activity source of the messaging adapter (the outbox relay and, later, the consumers).</summary>
+    /// <summary>Activity source of the messaging adapter (the outbox relay and the consumers).</summary>
     public const string MessagingSource = Prefix + ".Messaging";
 
     /// <summary>Meter of the cache boundary.</summary>
@@ -25,6 +25,9 @@ internal static class TelemetryNames
 
     /// <summary>Meter of the outbox.</summary>
     public const string OutboxMeter = Prefix + ".Outbox";
+
+    /// <summary>Meter of the message consumers.</summary>
+    public const string MessagingMeter = Prefix + ".Messaging";
 
     /// <summary>Meter that carries the business KPIs of a bounded context.</summary>
     /// <param name="context">Name of the context in PascalCase (<c>Inventory</c>).</param>
