@@ -34,9 +34,14 @@ services:
             Identity__Bootstrap__Accounts__0__AccessLevel: developer
             # Same OTEL_* variables as production; only the endpoint and the sampler differ locally.
             OTEL_SERVICE_NAME: ecommerce-api
-            OTEL_RESOURCE_ATTRIBUTES: "deployment.environment.name=development,service.version=0.0.0-dev"
+            OTEL_RESOURCE_ATTRIBUTES: "deployment.environment.name=development,service.version=0.0.0-dev,app.owner=team-platform"
             OTEL_EXPORTER_OTLP_ENDPOINT: "http://otel-lgtm:4317"
             OTEL_TRACES_SAMPLER: always_on
+            OTEL_EXPORTER_OTLP_PROTOCOL: grpc
+            OTEL_PROPAGATORS: tracecontext,baggage
+            OTEL_METRIC_EXPORT_INTERVAL: "15000"
+            OTEL_ATTRIBUTE_VALUE_LENGTH_LIMIT: "2048"
+            OTEL_SEMCONV_STABILITY_OPT_IN: http,database
         read_only: true
         tmpfs:
             - /tmp:size=64m,mode=1777
