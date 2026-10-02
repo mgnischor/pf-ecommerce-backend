@@ -1,4 +1,6 @@
-# OpenTelemetry Collector pipeline for the single-host (Compose) deployment (ai/OBSERVABILITY.md §12.3).
+# OpenTelemetry Collector pipeline (ai/OBSERVABILITY.md §12.3), shared by the single-host (Compose) deployment and Kubernetes
+# (kubernetes/base/otel-collector). The backend endpoints default to the Compose service names; Kubernetes sets
+# PROMETHEUS_OTLP_ENDPOINT, LOKI_OTLP_ENDPOINT and TEMPO_OTLP_ENDPOINT to the in-cluster backends.
 # The application pushes OTLP here; the Collector redacts, samples, and fans out to the backends.
 # Validate with:  docker run --rm -v ./observability/otel-collector:/etc/otelcol:ro \
 #                   otel/opentelemetry-collector-contrib:0.161.0 validate --config=/etc/otelcol/config.yaml
@@ -54,16 +56,16 @@ processors:
 exporters:
     # Prometheus with its OTLP receiver enabled.
     otlp_http/metrics:
-        endpoint: http://prometheus:9090/api/v1/otlp
+        endpoint: ${env:PROMETHEUS_OTLP_ENDPOINT:-http://prometheus:9090/api/v1/otlp}
         tls:
             insecure: true
     # Loki's native OTLP ingest.
     otlp_http/loki:
-        endpoint: http://loki:3100/otlp
+        endpoint: ${env:LOKI_OTLP_ENDPOINT:-http://loki:3100/otlp}
         tls:
             insecure: true
     otlp_grpc/tempo:
-        endpoint: tempo:4317
+        endpoint: ${env:TEMPO_OTLP_ENDPOINT:-tempo:4317}
         tls:
             insecure: true
 
