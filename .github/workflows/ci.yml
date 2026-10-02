@@ -123,3 +123,29 @@ jobs:
 
             - name: Build the migrations image
               run: docker build --target migrations -t ecommerce-migrations:ci .
+
+    kubernetes:
+        name: Kubernetes manifests
+        runs-on: ubuntu-latest
+        timeout-minutes: 10
+        steps:
+            - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+              with:
+                  persist-credentials: false
+
+            - name: Build every overlay and validate it against the Kubernetes schemas
+              run: |
+                  # kubectl ships Kustomize. kubeconform checks the core objects and the CRDs (External Secrets, KEDA, RabbitMQ)
+                  # against the published schemas; the version is pinned by digest like every other tool image.
+                  kubeconform="ghcr.io/yannh/kubeconform:v0.8.0@sha256:faffaf43f95aa6425306e1ab8d6fcad72acb9049158f38e574c085ea1ec0f64e"
+                  crds='https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json'
+                  validate() {
+                    kubectl kustomize "$1" | docker run --rm -i "$kubeconform" -strict -summary -kubernetes-version 1.32.0 \
+                      -schema-location default -schema-location "$crds" -
+                  }
+                  validate kubernetes/cluster
+                  for env in development staging production; do
+                    for part in foundation migrations workloads; do
+                      validate "kubernetes/overlays/$env/$part"
+                    done
+                  done
