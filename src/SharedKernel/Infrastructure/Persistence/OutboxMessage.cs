@@ -19,8 +19,6 @@ internal sealed class OutboxMessage
     /// <summary>Longest stored <c>tracestate</c>; a longer one is dropped (it is only a hint) rather than failing the commit.</summary>
     public const int MaxTraceStateLength = 512;
 
-    private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
-
     /// <summary>The event identifier: the primary key, so one event can never be queued twice.</summary>
     public Guid Id { get; private set; }
 
@@ -90,7 +88,7 @@ internal sealed class OutboxMessage
         {
             Id = domainEvent.EventId,
             Type = type.FullName ?? type.Name,
-            Payload = JsonSerializer.Serialize(domainEvent, type, Json),
+            Payload = JsonSerializer.Serialize(domainEvent, type, MessageJson.Options),
             AggregateId = domainEvent.AggregateId,
             AggregateVersion = domainEvent.AggregateVersion,
             OccurredAt = domainEvent.OccurredAt,
