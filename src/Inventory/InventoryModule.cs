@@ -24,6 +24,10 @@ internal static class InventoryModule
         services.AddUseCase<InventoryDbContext, AdjustStockHandler>();
         services.AddScoped<GetInventoryItemHandler>();
 
+        // The consumer is always known; it runs only where RabbitMq:ConsumersEnabled is true (the worker role).
+        services.AddConsumerUseCase<InventoryDbContext, OpenInventoryItemOnProductCreatedHandler>();
+        services.AddSingleton<IMessageConsumer, ProductCreatedConsumer>();
+
         return services;
     }
 }
