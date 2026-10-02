@@ -79,6 +79,58 @@ services:
                 max-size: "10m"
                 max-file: "3"
 
+    # The worker role (ai/CONTAINERS.md §6.1): the same image, selected by configuration. It runs the outbox relays and the
+    # message consumers and publishes no port; the API role never needs the broker to answer a request.
+    ecommerce-worker:
+        image: pf-ecommerce-api:dev
+        environment:
+            ASPNETCORE_ENVIRONMENT: Development
+            # The API applies the migrations; the worker only waits for it (depends_on) and must not race it.
+            Database__MigrateOnStartup: "false"
+            Outbox__Relay__Enabled: "true"
+            RabbitMq__ConsumersEnabled: "true"
+            ConnectionStrings__Postgres: "Host=postgres;Port=5432;Database=ecommerce;Username=app;Password=${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}"
+            ConnectionStrings__Valkey: "valkey:6379,password=${VALKEY_PASSWORD:?set VALKEY_PASSWORD in .env}"
+            ConnectionStrings__RabbitMQ: "amqp://app:${RABBITMQ_PASSWORD:?set RABBITMQ_PASSWORD in .env}@rabbitmq:5672"
+            OTEL_SERVICE_NAME: ecommerce-worker
+            OTEL_RESOURCE_ATTRIBUTES: "deployment.environment.name=development,service.version=0.0.0-dev,app.owner=team-platform"
+            OTEL_EXPORTER_OTLP_ENDPOINT: "http://otel-lgtm:4317"
+            OTEL_TRACES_SAMPLER: always_on
+            OTEL_EXPORTER_OTLP_PROTOCOL: grpc
+            OTEL_PROPAGATORS: tracecontext,baggage
+            OTEL_METRIC_EXPORT_INTERVAL: "15000"
+            OTEL_ATTRIBUTE_VALUE_LENGTH_LIMIT: "2048"
+            OTEL_SEMCONV_STABILITY_OPT_IN: http,database
+        read_only: true
+        tmpfs:
+            - /tmp:size=64m,mode=1777
+        cap_drop: [ALL]
+        security_opt:
+            - no-new-privileges:true
+        healthcheck:
+            test: ["CMD", "dotnet", "Portfolio.dll", "--health-check"]
+            interval: 15s
+            timeout: 5s
+            retries: 3
+            start_period: 15s
+        deploy:
+            resources:
+                limits:
+                    pids: 256
+                    cpus: "1.0"
+                    memory: 512M
+        stop_grace_period: 35s
+        depends_on:
+            ecommerce-api:
+                condition: service_healthy
+            rabbitmq:
+                condition: service_healthy
+            otel-lgtm:
+                condition: service_healthy
+        networks:
+            - backend
+        logging: *logging
+
     postgres:
         image: postgres:18.6-alpine3.24@sha256:77f585114c32fbca283dc835b0596f4e52b51b4c6662d7810b2f4084f60a1873
         user: "70:70"
