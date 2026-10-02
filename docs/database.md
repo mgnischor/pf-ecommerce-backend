@@ -59,8 +59,8 @@ answer **412** earlier, from the handler, when the client's version is already s
   `SELECT … FOR UPDATE SKIP LOCKED` in a short transaction that only stamps a lease (`locked_until`); the broker call happens
   outside any transaction; a row whose publisher failed or whose instance died becomes claimable again when the lease expires;
   after `Outbox:Relay:MaxAttempts` it waits for an operator. Several instances can run side by side.
-  **The relay is not part of the default composition**: it needs an `IOutboxPublisher` (RabbitMQ), which the messaging
-  work provides (`services.AddOutboxRelay<TContext, TPublisher>(configuration)`). Until then events accumulate in the outbox.
+  **The relays run only where `Outbox:Relay:Enabled` is `true`** (the worker role): `Program` then registers RabbitMQ
+  and one relay per context. Elsewhere events accumulate in the outbox. See [messaging.md](messaging.md), which also covers the consumers that use the inbox.
 - `Inbox` (`IInbox`) registers `(consumer, message_id)` in `<schema>.inbox_messages` in the consumer's own transaction; the
   composite primary key makes a duplicate delivery impossible to commit. No consumer exists yet.
 
@@ -72,7 +72,7 @@ answer **412** earlier, from the handler, when the client's version is already s
 | `Database:MaxPoolSize` (20), `CommandTimeoutSeconds` (30), `ConnectionTimeoutSeconds` (15) | One shared `NpgsqlDataSource`; `replicas × MaxPoolSize` must stay below the server's `max_connections`   |
 | `Database:MaxRetryCount` (3), `MaxRetryDelaySeconds` (5)                                   | EF Core retrying execution strategy for transient failures                                               |
 | `Database:MigrateOnStartup` (false)                                                        | Applies pending migrations at start. **Honoured only in the Development environment**                    |
-| `Outbox:Relay:*`                                                                           | Poll interval, batch size, lease, maximum attempts of the relay                                          |
+| `Outbox:Relay:*`                                                                           | Enabled (worker role only), poll interval, batch size, lease, maximum attempts of the relay              |
 
 `/health/ready` runs `SELECT 1` against PostgreSQL (3 s budget) and reports only that the database is unreachable, never why.
 `/health/live` does not depend on it.
