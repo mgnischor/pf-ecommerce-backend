@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Npgsql;
 using Portfolio.Catalog.Infrastructure;
@@ -14,21 +15,31 @@ namespace Portfolio.IntegrationTests.Database;
 /// </summary>
 internal static class TestContexts
 {
-    public static IdentityDbContext Identity(NpgsqlDataSource dataSource, TimeProvider? clock = null) =>
-        new(Options<IdentityDbContext>(IdentityDbContext.SchemaName, dataSource, clock));
+    public static IdentityDbContext Identity(
+        NpgsqlDataSource dataSource,
+        TimeProvider? clock = null,
+        IEnumerable<IDomainEventSubscriber>? subscribers = null
+    ) => new(Options<IdentityDbContext>(IdentityDbContext.SchemaName, dataSource, clock, subscribers));
 
-    public static CatalogDbContext Catalog(NpgsqlDataSource dataSource, TimeProvider? clock = null) =>
-        new(Options<CatalogDbContext>(CatalogDbContext.SchemaName, dataSource, clock));
+    public static CatalogDbContext Catalog(
+        NpgsqlDataSource dataSource,
+        TimeProvider? clock = null,
+        IEnumerable<IDomainEventSubscriber>? subscribers = null
+    ) => new(Options<CatalogDbContext>(CatalogDbContext.SchemaName, dataSource, clock, subscribers));
 
-    public static InventoryDbContext Inventory(NpgsqlDataSource dataSource, TimeProvider? clock = null) =>
-        new(Options<InventoryDbContext>(InventoryDbContext.SchemaName, dataSource, clock));
+    public static InventoryDbContext Inventory(
+        NpgsqlDataSource dataSource,
+        TimeProvider? clock = null,
+        IEnumerable<IDomainEventSubscriber>? subscribers = null
+    ) => new(Options<InventoryDbContext>(InventoryDbContext.SchemaName, dataSource, clock, subscribers));
 
     public static FakeTimeProvider NewClock() => new(new DateTimeOffset(2026, 10, 1, 12, 0, 0, TimeSpan.Zero));
 
     private static DbContextOptions<TContext> Options<TContext>(
         string schema,
         NpgsqlDataSource dataSource,
-        TimeProvider? clock
+        TimeProvider? clock,
+        IEnumerable<IDomainEventSubscriber>? subscribers
     )
         where TContext : ModuleDbContext
     {
@@ -36,7 +47,7 @@ internal static class TestContexts
         PostgresContextOptions.Configure(builder, schema, dataSource, new DatabaseOptions { MaxRetryCount = 0 });
         builder.AddInterceptors(
             new AuditingSaveChangesInterceptor(clock ?? TimeProvider.System),
-            new OutboxSaveChangesInterceptor()
+            new OutboxSaveChangesInterceptor(subscribers ?? [], NullLogger<OutboxSaveChangesInterceptor>.Instance)
         );
         return builder.Options;
     }
