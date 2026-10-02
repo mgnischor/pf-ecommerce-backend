@@ -1,3 +1,4 @@
+using Portfolio.IntegrationTests.Caching;
 using Portfolio.IntegrationTests.Database;
 
 // Justification: ConfigurationFolderTests mutates a process-wide environment variable to prove that
@@ -7,3 +8,5 @@ using Portfolio.IntegrationTests.Database;
 [assembly: CollectionBehavior(CollectionBehavior.CollectionPerAssembly)]
 // One PostgreSQL container for the whole run (ai/TESTS.md §4.1); every test gets its own database from it.
 [assembly: AssemblyFixture(typeof(PostgresFixture))]
+// One Valkey for the whole run (ai/TESTS.md §4.1); every host and cache under test uses its own key prefix.
+[assembly: AssemblyFixture(typeof(ValkeyFixture))]
