@@ -367,7 +367,11 @@ public sealed partial class PersistenceConventionTests
             TimeSpan.FromSeconds(2)
         );
 
+        // A messaging adapter names the publishing context in a routing key (`catalog.product-created`): the published
+        // language of the broker, not a table. Persistence code lives elsewhere and stays under this rule.
+        var messaging = $"{Path.DirectorySeparatorChar}Messaging{Path.DirectorySeparatorChar}";
         var crossings = Sources($"src/{context}/Infrastructure")
+            .Where(file => !file.Path.Contains(messaging, StringComparison.Ordinal))
             .SelectMany(file =>
                 pattern.Matches(file.Text).Select(match => $"{Path.GetFileName(file.Path)}: {match.Value}")
             )
