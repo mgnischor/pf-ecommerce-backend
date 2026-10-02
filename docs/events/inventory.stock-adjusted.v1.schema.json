@@ -1,0 +1,58 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "urn:ecommerce:events:inventory.stock-adjusted:v1",
+    "title": "inventory.stock-adjusted v1",
+    "description": "On-hand stock was corrected by a signed delta. Consumers must ignore properties they do not know: adding one is a backward-compatible change.",
+    "type": "object",
+    "required": [
+        "eventId",
+        "aggregateId",
+        "aggregateVersion",
+        "occurredAt",
+        "sku",
+        "delta",
+        "reasonCode",
+        "onHand",
+        "reserved"
+    ],
+    "properties": {
+        "eventId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Unique per occurrence; the message-id consumers deduplicate on."
+        },
+        "aggregateId": {
+            "type": "string",
+            "format": "uuid"
+        },
+        "aggregateVersion": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Version of the aggregate after the change; detects gaps and reordering."
+        },
+        "occurredAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "UTC."
+        },
+        "sku": {
+            "type": "string",
+            "minLength": 4,
+            "maxLength": 32
+        },
+        "delta": {
+            "type": "integer"
+        },
+        "reasonCode": {
+            "type": "string"
+        },
+        "onHand": {
+            "type": "integer",
+            "minimum": 0
+        },
+        "reserved": {
+            "type": "integer",
+            "minimum": 0
+        }
+    }
+}
