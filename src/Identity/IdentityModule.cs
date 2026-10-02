@@ -90,8 +90,13 @@ internal static class IdentityModule
         services.AddScoped<IUserRepository, EfUserRepository>();
         services.AddScoped<IRefreshTokenRepository, EfRefreshTokenRepository>();
 
-        // Temporary in-process blocklist, replaced by the Valkey-backed store (ai/TASKS.md, Database).
-        services.AddSingleton<IRevokedTokenStore, InMemoryRevokedTokenStore>();
+        // Valkey-backed: shared by every instance, bounded by the token lifetime (ValkeyRevokedTokenStore).
+        services.AddSingleton<IRevokedTokenStore, ValkeyRevokedTokenStore>();
+
+        // Cache-aside read of the account for token validation, evicted by the events that change it.
+        services.AddScoped<AccountStateCache>();
+        services.AddSingleton<IDomainEventSubscriber, AccountCacheInvalidator>();
+        services.AddSingleton<IDomainEventSubscriber, IdentityMetricsSubscriber>();
     }
 
     private static void AddUseCases(IServiceCollection services)
