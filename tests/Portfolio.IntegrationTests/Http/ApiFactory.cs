@@ -5,6 +5,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Time.Testing;
+using Portfolio.IntegrationTests.Caching;
 using Portfolio.IntegrationTests.Database;
 
 namespace Portfolio.IntegrationTests.Http;
@@ -39,9 +40,14 @@ internal sealed class ApiFactory : WebApplicationFactory<Program>
         int authPermitLimit = 10_000,
         FakeTimeProvider? clock = null,
         TestDatabase? database = null,
-        string? connectionString = null
+        string? connectionString = null,
+        string? valkeyConnectionString = null
     )
     {
+        // By default the host shares the run's Valkey under a key prefix of its own; a test may point it elsewhere
+        // (an unreachable address simulates an outage).
+        ValkeyConnectionString = valkeyConnectionString ?? ValkeyFixture.Current.ConnectionString;
+        ValkeyKeyPrefix = ValkeyFixture.NewPrefix();
         // By default the host runs on a database of its own; a test may bring one (and the credentials to reach it).
         _ownsDatabase = database is null;
         _database = database ?? PostgresFixture.Current.CreateDatabase();
@@ -61,6 +67,12 @@ internal sealed class ApiFactory : WebApplicationFactory<Program>
 
     /// <summary>The bootstrap accounts, one per access level.</summary>
     public Dictionary<string, TestAccount> Accounts { get; } = new(StringComparer.Ordinal);
+
+    /// <summary>The Valkey connection string this host uses.</summary>
+    public string ValkeyConnectionString { get; }
+
+    /// <summary>The key prefix of this host: every key it writes starts with it, so a test can find them.</summary>
+    public string ValkeyKeyPrefix { get; }
 
     /// <summary>The database this host runs on, for tests that look at what the API persisted.</summary>
     public TestDatabase Database => _database;
@@ -109,6 +121,8 @@ internal sealed class ApiFactory : WebApplicationFactory<Program>
                 System.Globalization.CultureInfo.InvariantCulture
             ),
             ["ConnectionStrings:Postgres"] = _connectionString,
+            ["ConnectionStrings:Valkey"] = ValkeyConnectionString,
+            ["Valkey:KeyPrefix"] = ValkeyKeyPrefix,
         };
 
         if (!_withSecrets)
