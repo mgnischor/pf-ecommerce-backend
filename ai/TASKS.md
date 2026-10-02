@@ -25,7 +25,7 @@ This file is the **single source of truth for task progress** during active deve
 ### Architecture
 
 - [ ] Define bounded contexts, the Context Map (`docs/`), and the subdomain classification ADR
-- [ ] Record the messaging-library and in-process dispatcher decisions as ADRs
+- [x] Record the messaging-library and in-process dispatcher decisions as ADRs
 
 ### Business Rules
 
@@ -69,8 +69,8 @@ This file is the **single source of truth for task progress** during active deve
 ### Tests
 
 - [~] Write unit tests for all business logic
-- [~] Write integration tests (Testcontainers) for PostgreSQL, Valkey, RabbitMQ, and the HTTP pipeline
-- [ ] Write idempotency tests for every handler and consumer that can be retried
+- [x] Write integration tests (Testcontainers) for PostgreSQL, Valkey, RabbitMQ, and the HTTP pipeline
+- [~] Write idempotency tests for every handler and consumer that can be retried
 - [ ] Write authorization and abuse-case tests (ownership, price tampering, coupon over-redemption, replayed webhooks)
 - [ ] Quarantine or fix any flaky tests
 
