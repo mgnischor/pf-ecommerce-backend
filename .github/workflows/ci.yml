@@ -67,7 +67,7 @@ jobs:
               run: |
                   # A model change without its migration fails here (ai/DATABASE.md §8.2).
                   for context in IdentityDbContext CatalogDbContext InventoryDbContext; do
-                    dotnet ef migrations has-pending-model-changes --context "$context" --project Portfolio.csproj --no-build -c Release
+                    dotnet ef migrations has-pending-model-changes --context "$context" --project Portfolio.csproj --no-build --configuration Release
                   done
 
             - name: Migrations bundles
