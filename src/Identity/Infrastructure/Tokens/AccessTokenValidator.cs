@@ -1,7 +1,6 @@
 using System.Globalization;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Portfolio.Identity.Application;
-using Portfolio.Identity.Domain;
 using Portfolio.SharedKernel.API.Authorization;
 using Portfolio.SharedKernel.Domain;
 
@@ -65,10 +64,10 @@ internal static class AccessTokenValidator
             return false;
         }
 
-        var users = services.GetRequiredService<IUserRepository>();
-        var user = await users.GetByIdAsync(userId.Value, cancellationToken);
+        // Cache-aside with event-driven eviction: the database is only read on a miss or while Valkey is down.
+        var account = await services.GetRequiredService<AccountStateCache>().GetAsync(userId.Value, cancellationToken);
 
-        return user is { Status: UserStatus.Active } && user.TokenVersion == version && user.AccessLevel == level;
+        return account.Accepts(version, level);
     }
 
     private static bool IsIssuedInTheFuture(System.Security.Claims.ClaimsPrincipal principal, TimeProvider timeProvider)
