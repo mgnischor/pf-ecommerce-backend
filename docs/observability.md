@@ -30,7 +30,7 @@ Tempo, and Grafana stack lives in the Compose files; this page covers what the a
 ## What is emitted
 
 **Traces**: ASP.NET Core (route template names the span; `/health` excluded), HttpClient, Npgsql, the cache boundary
-(`Ecommerce.Cache`), and the outbox relay (`Ecommerce.Messaging`, a PRODUCER span). The outbox row stores the W3C
+(`Ecommerce.Cache`), and the outbox relay and consumers (`Ecommerce.Messaging`: a PRODUCER span per publication, a CONSUMER span per delivery, child of it). The outbox row stores the W3C
 `traceparent`/`tracestate` of the request that raised the event, and the relay span continues it, so the trace survives
 the asynchronous hop.
 
@@ -41,6 +41,7 @@ runtime, Npgsql, and:
 | ---------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------- |
 | `app.cache.requests`, `app.cache.errors`, `app.cache.operation.duration`                                                                 | Cache hits/misses/bypasses, failures, latency         |
 | `app.outbox.pending`, `app.outbox.oldest_pending_age`, `app.outbox.publish.duration`                                                     | Outbox backlog, oldest unpublished age, relay latency |
+| `app.messaging.consumed`, `app.messaging.process.duration`                                                                               | Consumer deliveries by outcome, and their duration    |
 | `identity.signins`, `identity.accounts.registered/deactivated`, `identity.access_level.changes`, `identity.refresh_token.reuse_detected` | Identity KPIs                                         |
 | `catalog.products.created/price_changes/status_changes`                                                                                  | Catalog KPIs                                          |
 | `inventory.items.opened`, `inventory.reservations.created/released`, `inventory.stock.adjustments`                                       | Inventory KPIs                                        |
