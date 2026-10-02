@@ -1,5 +1,7 @@
+using System.Diagnostics.Metrics;
 using Portfolio.Identity.Application;
 using Portfolio.SharedKernel.Domain;
+using Portfolio.SharedKernel.Telemetry;
 
 namespace Portfolio.Identity.Infrastructure;
 
@@ -8,19 +10,59 @@ namespace Portfolio.Identity.Infrastructure;
 /// (≥ 5 failures in 5 minutes, refresh-token reuse, privilege changes) can key on them. Identifiers only:
 /// never passwords, tokens, e-mail addresses, or other personal data (§11.2).
 /// </summary>
-internal sealed partial class SecurityAuditLog(ILogger<SecurityAuditLog> logger) : ISecurityAudit
+internal sealed partial class SecurityAuditLog(ILogger<SecurityAuditLog> logger, IMeterFactory meterFactory)
+    : ISecurityAudit
 {
-    /// <inheritdoc />
-    public void SignInSucceeded(Guid userId) => LogSignInSucceeded(userId);
+    private static readonly KeyValuePair<string, object?> Context = new(TelemetryNames.BoundedContext, "identity");
+
+    private readonly Meter _meter = meterFactory.Create(TelemetryNames.ContextMeter("Identity"));
+
+    // Counted next to the audit log, from the same call: the sign-in outcome is the Tier 1 journey's success signal. The
+    // account is never a dimension (ai/OBSERVABILITY.md §5.4); the audit log carries the identifier.
+    private Counter<long>? _signIns;
+    private Counter<long>? _reuse;
+
+    private Counter<long> SignIns =>
+        _signIns ??= _meter.CreateCounter<long>(
+            "identity.signins",
+            unit: "{signin}",
+            description: "Sign-in attempts by outcome: succeeded, failed, or locked (refused because the account is locked)."
+        );
+
+    private Counter<long> Reuse =>
+        _reuse ??= _meter.CreateCounter<long>(
+            "identity.refresh_token.reuse_detected",
+            unit: "{event}",
+            description: "Replayed refresh tokens detected: each one revoked a whole session."
+        );
 
     /// <inheritdoc />
-    public void SignInFailed(Guid? userId, bool lockedOut) => LogSignInFailed(userId, lockedOut);
+    public void SignInSucceeded(Guid userId)
+    {
+        SignIns.Add(1, Context, new KeyValuePair<string, object?>(TelemetryNames.Outcome, "succeeded"));
+        LogSignInSucceeded(userId);
+    }
+
+    /// <inheritdoc />
+    public void SignInFailed(Guid? userId, bool lockedOut)
+    {
+        SignIns.Add(
+            1,
+            Context,
+            new KeyValuePair<string, object?>(TelemetryNames.Outcome, lockedOut ? "locked" : "failed")
+        );
+        LogSignInFailed(userId, lockedOut);
+    }
 
     /// <inheritdoc />
     public void AccountLocked(Guid userId) => LogAccountLocked(userId);
 
     /// <inheritdoc />
-    public void RefreshTokenReuseDetected(Guid userId, Guid familyId) => LogRefreshTokenReuse(userId, familyId);
+    public void RefreshTokenReuseDetected(Guid userId, Guid familyId)
+    {
+        Reuse.Add(1, Context);
+        LogRefreshTokenReuse(userId, familyId);
+    }
 
     /// <inheritdoc />
     public void TokenRevoked(Guid? userId) => LogTokenRevoked(userId);
