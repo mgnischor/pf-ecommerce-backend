@@ -1,0 +1,97 @@
+# The OpenTelemetry Collector runs as a Deployment of its own (ai/CONTAINERS.md §6.1), never as a sidecar. One replica on
+# purpose: tail sampling needs every span of a trace in the same instance. To scale it out, put a load-balancing exporter
+# (by trace id) in front first (ai/OBSERVABILITY.md §12.1). A Collector outage never affects request handling: the SDK
+# exports asynchronously and drops on overflow.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+    name: otel-collector
+    labels:
+        app.kubernetes.io/name: otel-collector
+        app.kubernetes.io/component: observability
+spec:
+    replicas: 1
+    revisionHistoryLimit: 10
+    progressDeadlineSeconds: 300
+    strategy:
+        type: RollingUpdate
+        rollingUpdate:
+            maxUnavailable: 0
+            maxSurge: 1
+    selector:
+        matchLabels:
+            app.kubernetes.io/name: otel-collector
+    template:
+        metadata:
+            labels:
+                app.kubernetes.io/name: otel-collector
+                app.kubernetes.io/component: observability
+        spec:
+            serviceAccountName: ecommerce-app
+            automountServiceAccountToken: false
+            priorityClassName: ecommerce-critical
+            terminationGracePeriodSeconds: 30
+            securityContext:
+                runAsNonRoot: true
+                runAsUser: 10001
+                runAsGroup: 10001
+                fsGroup: 10001
+                seccompProfile:
+                    type: RuntimeDefault
+            containers:
+                - name: otel-collector
+                  image: otel/opentelemetry-collector-contrib:0.161.0@sha256:fd328de2552466ad78385e1b1289c3f2402b1c45f265b252aab1955b42845ac1
+                  imagePullPolicy: IfNotPresent
+                  args: ["--config=/etc/otelcol/config.yaml"]
+                  securityContext:
+                      allowPrivilegeEscalation: false
+                      readOnlyRootFilesystem: true
+                      capabilities:
+                          drop: ["ALL"]
+                  env:
+                      # The backends live in the observability namespace (platform add-ons, kubernetes/README.md).
+                      - name: PROMETHEUS_OTLP_ENDPOINT
+                        value: http://prometheus.observability.svc.cluster.local:9090/api/v1/otlp
+                      - name: LOKI_OTLP_ENDPOINT
+                        value: http://loki.observability.svc.cluster.local:3100/otlp
+                      - name: TEMPO_OTLP_ENDPOINT
+                        value: tempo.observability.svc.cluster.local:4317
+                  ports:
+                      - { name: otlp-grpc, containerPort: 4317, protocol: TCP }
+                      - { name: otlp-http, containerPort: 4318, protocol: TCP }
+                      - { name: health, containerPort: 13133, protocol: TCP }
+                  resources:
+                      requests:
+                          cpu: 100m
+                          memory: 256Mi
+                          ephemeral-storage: 50Mi
+                      limits:
+                          cpu: 500m
+                          memory: 256Mi # memory_limiter in config.yaml sheds load at 200 MiB, below this
+                          ephemeral-storage: 100Mi
+                  startupProbe:
+                      httpGet:
+                          path: /
+                          port: health
+                      periodSeconds: 5
+                      failureThreshold: 12
+                  livenessProbe:
+                      httpGet:
+                          path: /
+                          port: health
+                      periodSeconds: 15
+                      failureThreshold: 3
+                  readinessProbe:
+                      httpGet:
+                          path: /
+                          port: health
+                      periodSeconds: 10
+                      failureThreshold: 3
+                  volumeMounts:
+                      - name: config
+                        mountPath: /etc/otelcol
+                        readOnly: true
+            volumes:
+                - name: config
+                  configMap:
+                      name: otel-collector-config
