@@ -1,0 +1,83 @@
+# Default deny, then explicit allows (ai/CONTAINERS.md §7.3). Ingress AND egress are closed for every Pod of the namespace;
+# each policy below opens one path. Nothing here allows 169.254.169.254 (cloud metadata): no rule matches it, and the
+# CIDR rules name the VPC range (patched per overlay), never 0.0.0.0/0.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+    name: default-deny-all
+spec:
+    podSelector: {}
+    policyTypes: [Ingress, Egress]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+    name: allow-dns
+spec:
+    podSelector: {}
+    policyTypes: [Egress]
+    egress:
+        - to:
+              - namespaceSelector:
+                    matchLabels:
+                        kubernetes.io/metadata.name: kube-system
+                podSelector:
+                    matchLabels:
+                        k8s-app: kube-dns
+          ports:
+              - { protocol: UDP, port: 53 }
+              - { protocol: TCP, port: 53 }
+---
+# The ingress controller reaches the API on 8080. Kubelet probes come from the node and are not subject to the policy.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+    name: api-allow-ingress-controller
+spec:
+    podSelector:
+        matchLabels:
+            app.kubernetes.io/name: ecommerce-api
+    policyTypes: [Ingress]
+    ingress:
+        - from:
+              - namespaceSelector:
+                    matchLabels:
+                        kubernetes.io/metadata.name: ingress-nginx
+          ports:
+              - { protocol: TCP, port: 8080 }
+---
+# API and worker -> PostgreSQL and Valkey (managed services inside the VPC; the CIDR is patched per overlay),
+# RabbitMQ, and the OpenTelemetry Collector.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+    name: app-egress
+spec:
+    podSelector:
+        matchExpressions:
+            - key: app.kubernetes.io/name
+              operator: In
+              values: [ecommerce-api, ecommerce-worker]
+    policyTypes: [Egress]
+    egress:
+        - to:
+              - ipBlock:
+                    cidr: 10.0.0.0/16 # VPC range: replaced in every overlay
+          ports:
+              - { protocol: TCP, port: 5432 } # PostgreSQL
+              - { protocol: TCP, port: 6379 } # Valkey
+        - to:
+              - podSelector:
+                    matchLabels:
+                        app.kubernetes.io/name: ecommerce-rabbitmq
+          ports:
+              - { protocol: TCP, port: 5672 }
+        - to:
+              - podSelector:
+                    matchLabels:
+                        app.kubernetes.io/name: otel-collector
+          ports:
+              - { protocol: TCP, port: 4317 }
+              - { protocol: TCP, port: 4318 }
+        # Payment, carrier and e-mail/SMS providers: add one allowlisted CIDR rule per provider in the overlay when the
+        # integration exists (ai/CONTAINERS.md §7.3). None is allowed today because none is implemented.
