@@ -1,0 +1,45 @@
+# KEDA scales the workers on the depth of the consumer queues (ai/CONTAINERS.md §6.5). Needs the KEDA operator.
+# minReplicaCount keeps the outbox relays running even when every queue is empty: the relay is not queue-driven.
+# maxReplicaCount is bound by the database connection budget (kubernetes/README.md): each worker may hold up to
+# Database:MaxPoolSize (20) connections.
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+    name: ecommerce-worker
+    labels:
+        app.kubernetes.io/name: ecommerce-worker
+        app.kubernetes.io/component: worker
+spec:
+    scaleTargetRef:
+        name: ecommerce-worker
+    minReplicaCount: 2
+    maxReplicaCount: 6
+    pollingInterval: 15
+    cooldownPeriod: 300
+    advanced:
+        horizontalPodAutoscalerConfig:
+            behavior:
+                scaleDown:
+                    stabilizationWindowSeconds: 300
+    triggers:
+        # One trigger per consumer queue; add one when a consumer is added (docs/messaging.md, "Registered consumers").
+        - type: rabbitmq
+          metadata:
+              protocol: amqp
+              queueName: inventory.open-item-on-product-created
+              mode: QueueLength
+              value: "100"
+          authenticationRef:
+              name: ecommerce-keda-rabbitmq
+---
+apiVersion: keda.sh/v1alpha1
+kind: TriggerAuthentication
+metadata:
+    name: ecommerce-keda-rabbitmq
+    labels:
+        app.kubernetes.io/name: ecommerce-worker
+spec:
+    secretTargetRef:
+        - parameter: host
+          name: ecommerce-keda-rabbitmq
+          key: host
