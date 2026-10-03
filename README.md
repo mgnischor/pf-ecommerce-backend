@@ -161,6 +161,12 @@ Implemented so far (see `ai/TASKS.md` for full progress). Types are `internal` b
   release within limits), and BR-INV-007 (SKU format), with `InventoryItemOpened`, `StockAdjusted`, `StockReserved`,
   and `StockReleased` events. The Application layer adds `OpenInventoryItemHandler` (BR-INV-008),
   `GetInventoryItemHandler`, and `AdjustStockHandler`; the three endpoints are wired and persisted in PostgreSQL (schema `inventory`).
+- `Customers` — `CustomerProfile` aggregate (the account's identifier is its own; name, e-mail copied from the account,
+  optional E.164 phone, locale, time zone), enforcing BR-CUS-001 to BR-CUS-005 through its value objects, BR-CUS-006
+  (one profile per account, created from Identity's `CustomerRegistered` event by an idempotent consumer, tolerant of
+  optional data that breaks a rule), BR-CUS-007 (only the caller's own profile), BR-CUS-008 (JSON Merge Patch with `If-Match`)
+  and BR-CUS-009 (masked contact data). `GetCustomerProfileHandler` and `UpdateCustomerProfileHandler` back
+  `GET`/`PATCH /customers/me`, persisted in PostgreSQL (schema `customers`).
 
 ## API
 
@@ -179,14 +185,14 @@ for all of them, including the sign-in flow, are in `Portfolio.http`; the OpenAP
 | Billing   | `GET /payments/{id}`, `POST /payments/{id}/refunds`, `POST /payments/webhooks/{provider}`                                                                                                                                                  |
 | Inventory | `POST /inventory/items`, `GET /inventory/items/{sku}`, `POST /inventory/items/{sku}/adjustments`                                                                                                                                           |
 | Shipping  | `GET /orders/{id}/shipments`                                                                                                                                                                                                               |
-| Customers | `GET /customers/me`                                                                                                                                                                                                                        |
+| Customers | `GET /customers/me`, `PATCH /customers/me`                                                                                                                                                                                                 |
 | Platform  | `GET /diagnostics/runtime`                                                                                                                                                                                                                 |
 
 Conventions already in place: cursor pagination (`limit`, `cursor`), `Idempotency-Key` on retried unsafe requests,
 `If-Match` preconditions, camelCase JSON with string enums, money as decimal strings, RFC 9457 Problem Details, and
 default-deny authorization (`[AllowAnonymous]` is explicit).
 
-**Status:** authentication, account administration, and the Inventory endpoints are implemented. The other business
+**Status:** authentication, account administration, and the Inventory and Customers endpoints are implemented. The other business
 endpoints are mapped, validated, and protected, but their use cases are not wired yet, so they answer `501` with
 Problem Details (`code: ENDPOINT_NOT_IMPLEMENTED`) once authorization passes.
 
