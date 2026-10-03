@@ -7,6 +7,8 @@ namespace Portfolio.Identity.Application;
 /// <summary>
 /// Self-registration of a customer. Always creates a <see cref="AccessLevel.Public"/> account: the request
 /// has no way to name a level, so it can never be used to escalate privileges (mass assignment, API3).
+/// What the customer typed about themselves is not stored here: it travels in the <c>CustomerRegistered</c> event to
+/// the Customers context, which owns those rules and creates the profile (BR-CUS-006).
 /// </summary>
 internal sealed class RegisterCustomerHandler(
     IUserRepository users,
@@ -44,7 +46,8 @@ internal sealed class RegisterCustomerHandler(
 
         // The policy check guarantees a non-null password.
         var hash = await passwordHasher.HashAsync(command.Password!, cancellationToken);
-        var user = User.Register(email.Value, hash, AccessLevel.Public, timeProvider);
+        var profile = new CustomerProfileData(command.FullName, command.Phone, command.Locale, command.TimeZone);
+        var user = User.RegisterCustomer(email.Value, hash, profile, timeProvider);
 
         await users.AddAsync(user, cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
