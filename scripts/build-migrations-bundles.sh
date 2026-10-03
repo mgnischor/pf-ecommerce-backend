@@ -18,6 +18,10 @@ output="${2:-artifacts/migrations}"
 dotnet tool restore >/dev/null
 mkdir -p "$output"
 
+# Without nullglob an unmatched pattern stays in the loop as a literal string, so the "no context" check below
+# would never fire and the script would try to bundle a context called "*DbContext".
+shopt -s nullglob
+
 contexts=()
 for file in src/*/Infrastructure/Persistence/*DbContext.cs; do
     case "$file" in src/SharedKernel/*) continue ;; esac # the abstract base, not a context
@@ -37,7 +41,8 @@ for context in "${contexts[@]}"; do
         --context "$context" \
         --project Portfolio.csproj \
         --self-contained \
-        --target-runtime "$runtime"         --configuration "${CONFIGURATION:-Release}" \
+        --target-runtime "$runtime" \
+        --configuration "${CONFIGURATION:-Release}" \
         --output "$output/$bundle" \
         --force
 done
