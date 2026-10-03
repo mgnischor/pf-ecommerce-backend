@@ -79,6 +79,28 @@ internal sealed class User : AggregateRoot
         return user;
     }
 
+    /// <summary>
+    /// Creates the active public account of a customer who registers themselves. Besides <see cref="UserRegistered"/>
+    /// it raises <see cref="CustomerRegistered"/>, which hands the e-mail and the profile data to the Customers context.
+    /// </summary>
+    /// <param name="email">Normalized e-mail.</param>
+    /// <param name="passwordHash">Argon2id PHC string produced by the password hasher.</param>
+    /// <param name="profile">What the customer typed about themselves at registration; may be empty.</param>
+    /// <param name="timeProvider">Source of UTC time.</param>
+    public static User RegisterCustomer(
+        EmailAddress email,
+        string passwordHash,
+        CustomerProfileData profile,
+        TimeProvider timeProvider
+    )
+    {
+        ArgumentNullException.ThrowIfNull(profile);
+
+        var user = Register(email, passwordHash, AccessLevel.Public, timeProvider);
+        user.AddDomainEvent(CustomerRegistered.For(user, profile));
+        return user;
+    }
+
     /// <summary>Whether the account is locked at <paramref name="now"/> (BR-IDN-003).</summary>
     /// <param name="now">Current UTC instant.</param>
     public bool IsLockedOut(DateTimeOffset now) => LockedUntil is { } until && now < until;
