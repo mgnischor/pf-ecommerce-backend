@@ -1,12 +1,16 @@
 # Single-host production deployment (ai/CONTAINERS.md §5). Kubernetes (kubernetes/) is the path for multi-node,
 # autoscaled deployments. Every rule of CONTAINERS.md §3 and §5 applies here without relaxation.
 #
-#   1. Create the secrets:   bash scripts/init-secrets.sh prod        (or: pwsh scripts/init-secrets.ps1 -Mode prod)
-#   2. Set the variables:    cp .env.prod.example .env.prod   (API_IMAGE, API_ALLOWED_HOSTS, JWT_ISSUER)
-#   3. Deploy:               docker compose --env-file .env.prod -f docker-compose-prod.yml up -d
+#   1. Create the secrets:   bash scripts/init-secrets.sh prod --admin-email you@example.com
+#                            (or: pwsh scripts/init-secrets.ps1 -Mode prod -AdminEmail you@example.com)
+#   2. Set the variables:    cp .env.prod.example .env.prod   (API_ALLOWED_HOSTS, JWT_ISSUER)
+#   3. Build and deploy:     docker compose --env-file .env.prod -f docker-compose-prod.yml up -d --build
 #      (--env-file keeps the development .env out of the production stack)
 #
-# - The application image comes from the private registry, pinned to version AND digest; there is no `build:`.
+# - The images are built on this host from the Dockerfile (targets `runtime` and `migrations`) and tagged
+#   pf-ecommerce-api:local and pf-ecommerce-migrations:local: no registry is involved (docs/container-exceptions.md
+#   EX-007). To deploy images from a registry instead, set API_IMAGE and MIGRATIONS_IMAGE to
+#   registry/name:<version>@sha256:<digest> (never `latest`) in .env.prod and run `docker compose pull` before `up`.
 # - Backing-service images are pinned by digest; `latest` is forbidden. Versions match docker-compose-dev.yml.
 # - Secrets are files (./secrets, untracked, ai/SECURITY.md §5); nothing sensitive is an environment variable
 #   or a command-line argument of the application.
@@ -17,6 +21,22 @@
 #   schemas (db-provision), one EF Core migrations bundle per bounded context run as app_migrator, then the grants
 #   (db-grant). The API connects as app_runtime, which can read and write rows but change no schema.
 name: pf-ecommerce
+
+# Local builds of the two images (see the header). The API and the worker run the same image, so both services carry the
+# same build: BuildKit's cache makes the second one a no-op, and neither depends on the other having been built first.
+x-api-build: &api-build
+    context: .
+    dockerfile: Dockerfile
+    target: runtime
+    args:
+        VERSION: "${API_VERSION:-0.0.0-local}"
+
+x-migrations-build: &migrations-build
+    context: .
+    dockerfile: Dockerfile
+    target: migrations
+    args:
+        VERSION: "${API_VERSION:-0.0.0-local}"
 
 x-hardening: &hardening
     read_only: true
@@ -63,7 +83,8 @@ x-db-provision: &db-provision
 # One EF Core migrations bundle; the connection string is a secret file, never an argument or a variable.
 x-db-migrate: &db-migrate
     <<: *db-job
-    image: ${MIGRATIONS_IMAGE:?set MIGRATIONS_IMAGE to registry/ecommerce-migrations:<version>@sha256:<digest>}
+    image: ${MIGRATIONS_IMAGE:-pf-ecommerce-migrations:local}
+    build: *migrations-build
     environment:
         PF_DESIGN_TIME_CONNECTION_FILE: /run/secrets/conn_postgres_migrator
         # A single-file bundle unpacks its native libraries; the root filesystem is read-only, /tmp is a tmpfs.
@@ -76,12 +97,15 @@ x-db-migrate: &db-migrate
 services:
     ecommerce-api:
         <<: *hardening
-        image: ${API_IMAGE:?set API_IMAGE to registry/ecommerce-api:<version>@sha256:<digest>}
+        image: ${API_IMAGE:-pf-ecommerce-api:local}
+        build: *api-build
         ports:
             - "${API_BIND_ADDRESS:-127.0.0.1}:${API_PORT:-8080}:8080"
         environment:
             ASPNETCORE_ENVIRONMENT: Production
-            AllowedHosts: "${API_ALLOWED_HOSTS:?set API_ALLOWED_HOSTS to the public host name(s), separated by ;}"
+            # "localhost" is appended for the container healthcheck: `--health-check` calls http://localhost:8080, and
+            # host filtering answers 400 to any Host that is not listed, which would keep the container unhealthy.
+            AllowedHosts: "${API_ALLOWED_HOSTS:?set API_ALLOWED_HOSTS to the public host name(s), separated by ;};localhost"
             Jwt__Issuer: "${JWT_ISSUER:?set JWT_ISSUER to the public https URL of the API}"
             Jwt__ActiveKeyId: "${JWT_ACTIVE_KEY_ID:-key-1}"
             Jwt__Keys__0__Id: "${JWT_ACTIVE_KEY_ID:-key-1}"
@@ -154,10 +178,12 @@ services:
     # safe beside the others (the relay claims rows with SKIP LOCKED, consumers deduplicate through the inbox).
     ecommerce-worker:
         <<: *hardening
-        image: ${API_IMAGE:?set API_IMAGE to registry/ecommerce-api:<version>@sha256:<digest>}
+        image: ${API_IMAGE:-pf-ecommerce-api:local}
+        build: *api-build
         environment:
             ASPNETCORE_ENVIRONMENT: Production
-            AllowedHosts: "${API_ALLOWED_HOSTS:?set API_ALLOWED_HOSTS to the public host name(s), separated by ;}"
+            # "localhost" is appended for the container healthcheck (see ecommerce-api).
+            AllowedHosts: "${API_ALLOWED_HOSTS:?set API_ALLOWED_HOSTS to the public host name(s), separated by ;};localhost"
             Jwt__Issuer: "${JWT_ISSUER:?set JWT_ISSUER to the public https URL of the API}"
             Jwt__ActiveKeyId: "${JWT_ACTIVE_KEY_ID:-key-1}"
             Jwt__Keys__0__Id: "${JWT_ACTIVE_KEY_ID:-key-1}"
@@ -288,18 +314,23 @@ services:
         image: valkey/valkey:9.1.2-alpine3.24@sha256:48332870af354a799964c0012ae1194a0bf2bf894eb508f945810596dc2d8d11
         user: "999:1000"
         # A cache, not a source of truth (ai/DATABASE.md §4): no persistence, bounded memory, LRU eviction.
-        # Valkey cannot read its password from a file, so the (alpine) entrypoint expands it from the secret
-        # without it ever appearing in the compose file or the environment.
+        # Valkey cannot read its password from a file, so the (alpine) entrypoint writes a configuration file into the
+        # tmpfs from the secret: the password is never in the compose file, the environment, or the process arguments.
+        # It fails closed: an empty or unreadable secret would otherwise start Valkey with no authentication at all.
         entrypoint:
             - sh
             - -c
-            - exec valkey-server --requirepass "$$(cat /run/secrets/valkey_password)" --save "" --appendonly no --maxmemory 192mb --maxmemory-policy allkeys-lru
+            - |
+                umask 077
+                password="$$(cat /run/secrets/valkey_password)"
+                [ -n "$$password" ] || { echo "the valkey_password secret is empty or unreadable" >&2; exit 1; }
+                printf 'requirepass "%s"\n' "$$password" > /tmp/valkey.conf
+                exec valkey-server /tmp/valkey.conf --save "" --appendonly no --maxmemory 192mb --maxmemory-policy allkeys-lru
         secrets:
             - valkey_password
-        volumes:
-            - valkeydata:/data
         tmpfs:
             - /tmp:size=16m,mode=1777
+            - /data:size=16m,uid=999,gid=1000 # working directory; nothing is persisted
         healthcheck:
             test: ["CMD-SHELL", 'REDISCLI_AUTH="$$(cat /run/secrets/valkey_password)" valkey-cli ping | grep -q PONG']
             interval: 10s
@@ -316,7 +347,7 @@ services:
 
     rabbitmq:
         <<: *hardening
-        image: rabbitmq:4.3.6-alpine@sha256:9a5494b32def2c288a755c933ea2ffd7f4a28647f7648776ad8b15507493f702
+        image: rabbitmq:4.3.6-alpine@sha256:2cb43283d8bbd3caa6c0f0dc00e96c8de772df33df7fd8af6aee4d605aeb8ada
         user: "100:101"
         hostname: rabbitmq
         environment:
@@ -459,6 +490,9 @@ services:
         environment:
             GF_SECURITY_ADMIN_USER: admin
             GF_SECURITY_ADMIN_PASSWORD__FILE: /run/secrets/grafana_admin_password
+            # Console only: the root filesystem is read-only, and the default `console file` mode would try to open
+            # /var/log/grafana/grafana.log (ai/CONTAINERS.md §3.5: no log files inside the container).
+            GF_LOG_MODE: console
             GF_USERS_ALLOW_SIGN_UP: "false"
             GF_AUTH_ANONYMOUS_ENABLED: "false"
             GF_SECURITY_DISABLE_GRAVATAR: "true"
@@ -502,7 +536,6 @@ services:
 
 volumes:
     pgdata:
-    valkeydata:
     rabbitmqdata:
     prometheusdata:
     lokidata:
