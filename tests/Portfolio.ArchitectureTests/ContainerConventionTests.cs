@@ -162,6 +162,39 @@ public sealed partial class ContainerConventionTests
     }
 
     [Fact]
+    public void Every_persistence_context_should_have_a_migration_job_and_a_provisioned_schema()
+    {
+        // The bundle script discovers the contexts from the source tree; the places below list them by hand.
+        var contexts = Directory
+            .GetDirectories(Path.Combine(Root, "src"))
+            .Where(directory => Path.GetFileName(directory) != "SharedKernel")
+            .Select(directory => Path.Combine(directory, "Infrastructure", "Persistence"))
+            .Where(Directory.Exists)
+            .SelectMany(directory => Directory.GetFiles(directory, "*DbContext.cs"))
+            .Select(file => Path.GetFileNameWithoutExtension(file)[..^"DbContext".Length].ToLowerInvariant())
+            .ToArray();
+
+        contexts.ShouldNotBeEmpty();
+
+        var compose = Read("docker-compose-prod.yml");
+        var kubernetesJob = Read("kubernetes/migrations/db-release-job.yaml");
+        var provisioning = Read("database/provision-roles.sql");
+
+        foreach (var context in contexts)
+        {
+            compose.ShouldContain(
+                $"/migrations/migrate-{context}",
+                customMessage: $"docker-compose-prod.yml: {context}"
+            );
+            kubernetesJob.ShouldContain(
+                $"/migrations/migrate-{context}",
+                customMessage: $"db-release-job.yaml: {context}"
+            );
+            provisioning.ShouldContain($"'{context}'", customMessage: $"provision-roles.sql: schema {context}");
+        }
+    }
+
+    [Fact]
     public void Environment_templates_should_hold_only_placeholders_and_secrets_should_be_ignored_by_git()
     {
         Read(".env.example").ShouldContain("change-me");
