@@ -29,7 +29,7 @@ does not declare its authorization.
 | Minimum level                  | Endpoints                                                                                                                                                                                                                                                          |
 | ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | anonymous                      | `POST /auth/tokens`, `POST /auth/tokens/refresh`, `POST /auth/tokens/revocation`, `POST /auth/registrations`, `GET /.well-known/jwks.json`, `GET /products`, `GET /products/{id}`, `POST /payments/webhooks/{provider}` (authenticity from the provider signature) |
-| public (any signed-in account) | `GET /auth/me`, carts, checkout, orders, `GET /payments/{id}`, shipments, `GET /customers/me`                                                                                                                                                                      |
+| public (any signed-in account) | `GET /auth/me`, carts, checkout, orders, `GET /payments/{id}`, shipments, `GET /customers/me`, `PATCH /customers/me`                                                                                                                                               |
 | collaborator                   | `POST /products`, `PATCH /products/{id}`, `GET /inventory/items/{sku}`                                                                                                                                                                                             |
 | manager                        | `PUT /products/{id}/price`, `POST /products/{id}/activation`, `POST /products/{id}/discontinuation`, `POST /payments/{id}/refunds`, `POST /inventory/items/{sku}/adjustments`                                                                                      |
 | administrator                  | `DELETE /products/{id}`, `POST /users`, `PUT /users/{id}/access-level`, `POST /users/{id}/deactivation`                                                                                                                                                            |
@@ -56,6 +56,12 @@ each of the five levels, and the response must follow the policy exactly (`401`,
 | Description     | An e-mail is trimmed and lowercased, is at most 254 characters (local part at most 64), has exactly one `@`, a domain with at least two dot-separated labels, and only printable ASCII without specials. Non-ASCII characters are rejected on purpose: look-alike addresses must not create distinct accounts. At most one account uses a given e-mail. |
 | Error behavior  | `EMAIL_INVALID` (validation, field `email`); `EMAIL_ALREADY_REGISTERED` (conflict).                                                                                                                                                                                                                                                                     |
 | Known trade-off | Registration answers `409` for an existing e-mail, which allows account enumeration through that one endpoint. It is rate limited; the uniform `202` alternative needs the e-mail verification flow, which does not exist yet.                                                                                                                          |
+
+> **Registration profile.** `POST /auth/registrations` also accepts an optional `fullName`, `phone`, `locale` and
+> `timeZone` (size-bounded only). Identity neither stores nor judges them: a self-registration raises
+> `CustomerRegistered` next to `UserRegistered`, carrying the e-mail and these values to the Customers context, which owns
+> their rules and creates the profile (BR-CUS-006). `UserRegistered` stays free of personal data; accounts an administrator
+> creates raise only `UserRegistered` and get no profile.
 
 ## BR-IDN-002 — Password Policy
 
