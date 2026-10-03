@@ -17,6 +17,7 @@ public sealed class MigrationTests : DatabaseTestBase
     [InlineData("identity", "refresh_tokens,users")]
     [InlineData("catalog", "products")]
     [InlineData("inventory", "inventory_items,stock_movements")]
+    [InlineData("customers", "customer_profiles")]
     public async Task Should_create_in_each_schema_its_own_tables_and_its_own_outbox_inbox_and_history(
         string schema,
         string domainTables
@@ -30,7 +31,7 @@ public sealed class MigrationTests : DatabaseTestBase
     }
 
     [Fact]
-    public async Task Should_create_nothing_outside_the_three_context_schemas()
+    public async Task Should_create_nothing_outside_the_four_context_schemas()
     {
         var schemas = await Database.StringsAsync(
             """
@@ -39,28 +40,34 @@ public sealed class MigrationTests : DatabaseTestBase
             """
         );
 
-        schemas.ShouldBe(["catalog", "identity", "inventory"]);
+        schemas.ShouldBe(["catalog", "customers", "identity", "inventory"]);
     }
 
     [Fact]
     public async Task Should_keep_the_applied_migrations_in_each_contexts_own_history_table_in_order()
     {
-        foreach (var schema in new[] { "identity", "catalog", "inventory" })
+        foreach (var schema in new[] { "identity", "catalog", "inventory", "customers" })
         {
             var applied = await Database.StringsAsync(
                 $"SELECT migration_id FROM {schema}.__ef_migrations_history ORDER BY migration_id"
             );
 
-            applied.Count.ShouldBe(2);
+            // The three older contexts added the trace columns in a second migration; Customers was born with them.
+            var expected = string.Equals(schema, "customers", StringComparison.Ordinal) ? 1 : 2;
+
+            applied.Count.ShouldBe(expected);
             applied[0].ShouldEndWith($"_Create{char.ToUpperInvariant(schema[0])}{schema[1..]}Schema");
-            applied[1].ShouldEndWith("_AddOutboxTraceContext");
+            if (expected == 2)
+            {
+                applied[1].ShouldEndWith("_AddOutboxTraceContext");
+            }
         }
     }
 
     [Fact]
     public async Task Should_add_the_trace_context_columns_to_every_outbox_as_nullable_so_the_old_version_keeps_working()
     {
-        foreach (var schema in new[] { "identity", "catalog", "inventory" })
+        foreach (var schema in new[] { "identity", "catalog", "inventory", "customers" })
         {
             var columns = await Database.StringsAsync(
                 $"""
@@ -96,6 +103,7 @@ public sealed class MigrationTests : DatabaseTestBase
     [InlineData("identity", "refresh_tokens", true)]
     [InlineData("catalog", "products", true)]
     [InlineData("inventory", "inventory_items", true)]
+    [InlineData("customers", "customer_profiles", true)]
     [InlineData("inventory", "stock_movements", false)]
     public async Task Should_give_every_domain_table_the_traceability_columns_and_aggregate_roots_a_version(
         string schema,
