@@ -89,6 +89,44 @@ public sealed class RegisterCustomerHandlerTests
     }
 
     [Fact]
+    [Trait("Rule", "BR-CUS-006")]
+    public async Task Should_pass_what_the_customer_typed_to_the_customers_context_without_storing_it()
+    {
+        var result = await _world.Register.HandleAsync(
+            new RegisterCustomerCommand(
+                "ana.souza@example.com",
+                IdentityWorld.StrongPassword,
+                "Ana Souza",
+                "+5511987654321",
+                "en",
+                "Europe/Lisbon"
+            ),
+            TestContext.Current.CancellationToken
+        );
+
+        var user = (
+            await _world.Users.GetByIdAsync(result.Value, TestContext.Current.CancellationToken)
+        ).ShouldNotBeNull();
+        var registered = user.DomainEvents.OfType<CustomerRegistered>().ShouldHaveSingleItem();
+        registered.Email.ShouldBe("ana.souza@example.com");
+        registered.FullName.ShouldBe("Ana Souza");
+        registered.Phone.ShouldBe("+5511987654321");
+        registered.Locale.ShouldBe("en");
+        registered.TimeZone.ShouldBe("Europe/Lisbon");
+    }
+
+    [Fact]
+    public async Task Should_register_a_customer_who_typed_nothing_about_themselves()
+    {
+        var id = (await RegisterAsync("ana.souza@example.com", IdentityWorld.StrongPassword)).Value;
+
+        var user = (await _world.Users.GetByIdAsync(id, TestContext.Current.CancellationToken)).ShouldNotBeNull();
+        var registered = user.DomainEvents.OfType<CustomerRegistered>().ShouldHaveSingleItem();
+        registered.FullName.ShouldBeNull();
+        registered.Phone.ShouldBeNull();
+    }
+
+    [Fact]
     [Trait("Rule", "BR-IDN-001")]
     public async Task Should_reject_a_duplicate_e_mail_regardless_of_case()
     {
