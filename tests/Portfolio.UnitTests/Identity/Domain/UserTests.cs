@@ -38,6 +38,50 @@ public sealed class UserRegistrationTests
     }
 
     [Fact]
+    [Trait("Rule", "BR-CUS-006")]
+    public void Should_hand_the_email_and_the_typed_profile_to_customers_in_a_second_event_for_self_registration()
+    {
+        var profile = new CustomerProfileData("  Ana Souza ", "+5511987654321", "pt-BR", "America/Sao_Paulo");
+
+        var user = User.RegisterCustomer(Email, "hash", profile, _clock);
+
+        user.AccessLevel.ShouldBe(AccessLevel.Public);
+        user.DomainEvents.Count.ShouldBe(2);
+        user.DomainEvents.First().ShouldBeOfType<UserRegistered>();
+        var registered = user.DomainEvents.Last().ShouldBeOfType<CustomerRegistered>();
+        registered.AggregateId.ShouldBe(user.Id);
+        registered.AggregateVersion.ShouldBe(user.Version);
+        registered.Email.ShouldBe("ana.souza@example.com");
+        registered.FullName.ShouldBe("Ana Souza");
+        registered.Phone.ShouldBe("+5511987654321");
+        registered.Locale.ShouldBe("pt-BR");
+        registered.TimeZone.ShouldBe("America/Sao_Paulo");
+    }
+
+    [Fact]
+    public void Should_send_blank_profile_data_as_null_and_keep_the_no_personal_data_event_clean()
+    {
+        var profile = new CustomerProfileData("   ", "", null, " ");
+
+        var user = User.RegisterCustomer(Email, "hash", profile, _clock);
+
+        var registered = user.DomainEvents.OfType<CustomerRegistered>().ShouldHaveSingleItem();
+        registered.FullName.ShouldBeNull();
+        registered.Phone.ShouldBeNull();
+        registered.Locale.ShouldBeNull();
+        registered.TimeZone.ShouldBeNull();
+        user.DomainEvents.OfType<UserRegistered>().ShouldHaveSingleItem().ToString().ShouldNotContain("ana.souza");
+    }
+
+    [Fact]
+    public void Should_not_raise_the_customer_event_for_an_account_an_administrator_creates()
+    {
+        var user = User.Register(Email, "hash", AccessLevel.Public, _clock);
+
+        user.DomainEvents.OfType<CustomerRegistered>().ShouldBeEmpty();
+    }
+
+    [Fact]
     public void Should_reject_an_undefined_access_level()
     {
         Should.Throw<ArgumentOutOfRangeException>(() => User.Register(Email, "hash", (AccessLevel)42, _clock));
