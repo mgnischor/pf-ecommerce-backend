@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Npgsql;
 using Portfolio.Catalog.Infrastructure;
+using Portfolio.Customers.Infrastructure;
 using Portfolio.Identity.Infrastructure;
 using Portfolio.Inventory.Infrastructure;
 using Portfolio.SharedKernel.Infrastructure;
@@ -32,6 +33,12 @@ internal static class TestContexts
         TimeProvider? clock = null,
         IEnumerable<IDomainEventSubscriber>? subscribers = null
     ) => new(Options<InventoryDbContext>(InventoryDbContext.SchemaName, dataSource, clock, subscribers));
+
+    public static CustomersDbContext Customers(
+        NpgsqlDataSource dataSource,
+        TimeProvider? clock = null,
+        IEnumerable<IDomainEventSubscriber>? subscribers = null
+    ) => new(Options<CustomersDbContext>(CustomersDbContext.SchemaName, dataSource, clock, subscribers));
 
     public static FakeTimeProvider NewClock() => new(new DateTimeOffset(2026, 10, 1, 12, 0, 0, TimeSpan.Zero));
 
