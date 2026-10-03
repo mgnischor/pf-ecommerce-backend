@@ -23,6 +23,13 @@ secrets
 *.p12
 appsettings.*.local.json
 *.user
+# The patterns above only match at the context root; these catch the same files anywhere in the tree.
+**/.env
+**/secrets
+**/*.pem
+**/*.key
+**/*.pfx
+**/*.p12
 
 # Build output and test results
 **/bin
