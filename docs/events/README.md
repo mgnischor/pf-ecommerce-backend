@@ -19,3 +19,12 @@ consumer needs before parsing: `message-id` (= `eventId`, what the inbox dedupli
   window agreed with the consumers.
 - `tests/Portfolio.IntegrationTests/Messaging/EventContractTests.cs` serializes every domain event the way the outbox does
   and validates it against its schema, and fails when an event has no schema or a schema has no event.
+
+## Personal data in events
+
+Events carry no personal data by default (`ai/SECURITY.md §11.2`). The one deliberate exception is
+`identity.customer-registered`, which carries the account e-mail and what the customer typed at registration so the
+Customers context can create the profile (`docs/business-rules/customers.md`, BR-CUS-006). It exists apart from
+`identity.user-registered` so that every other consumer of accounts keeps receiving an event without personal data, and
+only one queue, owned by Customers, binds to it. Its body is never logged or put in telemetry, and the rows of the Identity
+outbox that carried it are personal data until a retention job removes them.
