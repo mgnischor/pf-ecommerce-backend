@@ -4,6 +4,7 @@
 #   pwsh scripts/init-secrets.ps1 -Mode prod -AdminEmail a@b.com      writes ./secrets/*   (docker-compose-prod.yml)
 #
 # Existing files are never overwritten. Both targets are untracked (.gitignore).
+#Requires -Version 7.0
 [CmdletBinding()]
 param(
     [Parameter(Mandatory)][ValidateSet('dev', 'prod')][string]$Mode,
@@ -12,14 +13,24 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
+# Both targets are paths relative to the repository root, wherever the script is started from.
+Set-Location (Join-Path $PSScriptRoot '..')
+
 function New-RandomHex([int]$Bytes = 24) {
     [Convert]::ToHexString([System.Security.Cryptography.RandomNumberGenerator]::GetBytes($Bytes)).ToLowerInvariant()
+}
+
+# On Linux and macOS the default umask leaves new files readable by every local user: apply the same modes as
+# init-secrets.sh (the container user must read secret files, so they stay world-readable inside a private directory).
+function Set-Mode([string]$Path, [string]$Permissions) {
+    if (-not $IsWindows) { chmod $Permissions $Path }
 }
 
 function Write-Secret([string]$Name, [string]$Value) {
     $path = Join-Path 'secrets' $Name
     if (Test-Path $path) { Write-Host "keep    $path (already exists)"; return }
     [System.IO.File]::WriteAllText((Join-Path (Get-Location) $path), $Value)
+    Set-Mode $path 0444
     Write-Host "created $path"
 }
 
@@ -32,6 +43,7 @@ if ($Mode -eq 'dev') {
         'DEV_ACCOUNT_EMAIL=dev.account@example.com'
         "DEV_ACCOUNT_PASSWORD=$(New-RandomHex 16)"
     ) | Set-Content -Path .env -Encoding utf8NoBOM
+    Set-Mode .env 0600
     Write-Host 'created .env (development account: dev.account@example.com; the password is in .env)'
     return
 }
@@ -39,6 +51,7 @@ if ($Mode -eq 'dev') {
 if (-not $AdminEmail) { throw 'prod needs -AdminEmail <address> for the first administrator' }
 
 New-Item -ItemType Directory -Force -Path secrets | Out-Null
+Set-Mode secrets 0700
 $pg = New-RandomHex; $valkey = New-RandomHex; $rabbit = New-RandomHex
 $migrator = New-RandomHex; $runtime = New-RandomHex; $reporting = New-RandomHex
 Write-Secret 'postgres_password.txt' $pg
@@ -62,8 +75,15 @@ if (Test-Path $pem) {
     Write-Host "keep    $pem (already exists)"
 }
 else {
-    $key = [System.Security.Cryptography.ECDsa]::Create([System.Security.Cryptography.ECCurve]::NamedCurves.nistP384)
-    [System.IO.File]::WriteAllText((Join-Path (Get-Location) $pem), $key.ExportPkcs8PrivateKeyPem())
+    # NamedCurves is a nested class: [ECCurve]::NamedCurves is $null in PowerShell, [ECCurve+NamedCurves] is the type.
+    $key = [System.Security.Cryptography.ECDsa]::Create([System.Security.Cryptography.ECCurve+NamedCurves]::nistP384)
+    try {
+        [System.IO.File]::WriteAllText((Join-Path (Get-Location) $pem), $key.ExportPkcs8PrivateKeyPem())
+    }
+    finally {
+        $key.Dispose()
+    }
+    Set-Mode $pem 0444
     Write-Host "created $pem"
 }
 Write-Host 'Back these files up in your secrets manager; losing the JWT key signs every user out.'
