@@ -270,12 +270,19 @@ services:
             db-migrate-catalog:
                 condition: service_completed_successfully
 
+    db-migrate-customers:
+        <<: *db-migrate
+        entrypoint: ["/migrations/migrate-customers"]
+        depends_on:
+            db-migrate-inventory:
+                condition: service_completed_successfully
+
     # Runs the provisioning again: the grants now cover the tables the migrations created, and the runtime role
     # is denied the migration history.
     db-grant:
         <<: *db-provision
         depends_on:
-            db-migrate-inventory:
+            db-migrate-customers:
                 condition: service_completed_successfully
 
     postgres:
