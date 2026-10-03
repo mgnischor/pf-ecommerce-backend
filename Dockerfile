@@ -1,4 +1,7 @@
-# Production image of the pf-ecommerce API (ai/CONTAINERS.md §2, §13.1).
+# Production images of the pf-ecommerce API (ai/CONTAINERS.md §2, §13.1). Two targets share one build stage:
+#
+#   runtime     the API and worker image (the default: it is the last stage, so a bare `docker build .` produces it)
+#   migrations  one EF Core bundle per bounded context, run as a job before a new version rolls out
 #
 #   docker build --target runtime \
 #     --build-arg VERSION=1.0.0 --build-arg REVISION=$(git rev-parse HEAD) --build-arg CREATED=$(date -u +%FT%TZ) \
@@ -10,7 +13,7 @@
 # ---------------------------------------------------------------------------------------------------------
 # Stage 1: build. The SDK, package caches, and sources never reach the final image.
 # ---------------------------------------------------------------------------------------------------------
-FROM mcr.microsoft.com/dotnet/sdk:10.0.401-noble@sha256:35d40304542c8689331f8cab17c65926cdf48fe711e289321d71924b230a7d29 AS build
+FROM mcr.microsoft.com/dotnet/sdk:10.0.401-noble@sha256:e70cdb7f80b0348f5cb85f19a8f670fca061f033d57eed12fa003d58b0e06317 AS build
 
 ENV DOTNET_NOLOGO=true \
     DOTNET_CLI_TELEMETRY_OPTOUT=true \
@@ -37,14 +40,65 @@ RUN --mount=type=cache,target=/root/.nuget/packages \
         -p:ContinuousIntegrationBuild=true
 
 # ---------------------------------------------------------------------------------------------------------
-# Stage 2: runtime. Chiseled Ubuntu: no shell, no package manager, no SUID binaries, non-root user built in.
+# Migrations (ai/DATABASE.md §6.1, ai/CONTAINERS.md §6.7). One self-contained EF Core bundle per bounded context,
+# built from the same sources as the application so schema and code ship together. It is a separate image and
+# runs as a job with the DDL-capable role before a new version rolls out, never inside the API:
+#
+#   docker build --target migrations -t ecommerce-migrations:1.0.0 .
+#   docker run --rm -e PF_DESIGN_TIME_CONNECTION_FILE=/run/secrets/conn_postgres_migrator ... /migrations/migrate-identity
+#
+# Run the bundles in order (identity, catalog, inventory; they are independent). A bundle takes the connection from
+# the secret file named by PF_DESIGN_TIME_CONNECTION_FILE, so it never appears on a command line.
 # ---------------------------------------------------------------------------------------------------------
-FROM mcr.microsoft.com/dotnet/aspnet:10.0.12-noble-chiseled@sha256:9651fa59abcdf177c30392cb44a820605ca5d618429ab37acbf6e7c644510b02 AS runtime
+FROM build AS bundles
+
+# The bundle is a native executable: build it for the architecture of the image that will run it (BuildKit sets
+# TARGETARCH; the legacy builder leaves it empty, which means amd64).
+ARG TARGETARCH
+
+COPY .config/ .config/
+COPY scripts/build-migrations-bundles.sh scripts/
+RUN --mount=type=cache,target=/root/.nuget/packages \
+    case "${TARGETARCH:-amd64}" in \
+        amd64) runtime=linux-x64 ;; \
+        arm64) runtime=linux-arm64 ;; \
+        *) echo "Unsupported architecture: ${TARGETARCH}" >&2; exit 1 ;; \
+    esac \
+    && bash scripts/build-migrations-bundles.sh "${runtime}" /app/migrations
+
+FROM mcr.microsoft.com/dotnet/runtime-deps:10.0.12-noble-chiseled@sha256:dc5cd0c7d0a39b825312b4f0986d99b9adf9b6a3af69bc23cd345c27d9ed916a AS migrations
 
 ARG VERSION=0.0.0-dev
 ARG REVISION=unknown
 ARG CREATED=unknown
-ARG SOURCE=https://github.com/OWNER/pf-ecommerce-backend
+ARG SOURCE=https://github.com/mgnischor/pf-ecommerce-backend
+
+LABEL org.opencontainers.image.title="pf-ecommerce-migrations" \
+      org.opencontainers.image.description="EF Core migrations bundles of the pf-ecommerce bounded contexts" \
+      org.opencontainers.image.source="${SOURCE}" \
+      org.opencontainers.image.version="${VERSION}" \
+      org.opencontainers.image.revision="${REVISION}" \
+      org.opencontainers.image.created="${CREATED}"
+
+WORKDIR /migrations
+COPY --from=bundles /app/migrations/ .
+
+ENV DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=true
+
+USER $APP_UID
+
+# No ENTRYPOINT: the orchestrator runs one bundle per job step (identity, catalog, inventory).
+
+# ---------------------------------------------------------------------------------------------------------
+# Final stage: runtime. Chiseled Ubuntu: no shell, no package manager, no SUID binaries, non-root user built in.
+# It is declared last so that building without --target yields the API image, never the migrations job.
+# ---------------------------------------------------------------------------------------------------------
+FROM mcr.microsoft.com/dotnet/aspnet:10.0.12-noble-chiseled@sha256:48e51f2f6798897be7ac4e775c049ed8fe60d3190f637e1f9c9dc7513efa659c AS runtime
+
+ARG VERSION=0.0.0-dev
+ARG REVISION=unknown
+ARG CREATED=unknown
+ARG SOURCE=https://github.com/mgnischor/pf-ecommerce-backend
 
 LABEL org.opencontainers.image.title="pf-ecommerce-api" \
       org.opencontainers.image.description="E-commerce modular monolith API (C# / .NET 10)" \
@@ -74,33 +128,3 @@ EXPOSE 8080
 # `dotnet Portfolio.dll --health-check` (the image has no shell, curl, or wget).
 # Exec form, so SIGTERM reaches the process and the host drains gracefully.
 ENTRYPOINT ["dotnet", "Portfolio.dll"]
-
-# ---------------------------------------------------------------------------------------------------------
-# Migrations (ai/DATABASE.md §6.1, ai/CONTAINERS.md §6.7). One self-contained EF Core bundle per bounded context,
-# built from the same sources as the application so schema and code ship together. It is a separate image and
-# runs as a job with the DDL-capable role before a new version rolls out, never inside the API:
-#
-#   docker build --target migrations -t ecommerce-migrations:1.0.0 .
-#   docker run --rm -e PF_DESIGN_TIME_CONNECTION_FILE=/run/secrets/conn_postgres_migrator ... /migrations/migrate-identity
-#
-# Run the bundles in order (identity, catalog, inventory; they are independent). A bundle takes the connection from
-# the secret file named by PF_DESIGN_TIME_CONNECTION_FILE, so it never appears on a command line.
-# ---------------------------------------------------------------------------------------------------------
-FROM build AS bundles
-
-COPY .config/ .config/
-COPY scripts/build-migrations-bundles.sh scripts/
-RUN --mount=type=cache,target=/root/.nuget/packages     bash scripts/build-migrations-bundles.sh linux-x64 /app/migrations
-
-FROM mcr.microsoft.com/dotnet/runtime-deps:10.0.12-noble-chiseled@sha256:18d4848091a40d13dbfdd6a8340c1657dc3e2f2d7fa2f042e9d162e68669dbc9 AS migrations
-
-LABEL org.opencontainers.image.title="pf-ecommerce-migrations"       org.opencontainers.image.description="EF Core migrations bundles of the pf-ecommerce bounded contexts"
-
-WORKDIR /migrations
-COPY --from=bundles /app/migrations/ .
-
-ENV DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=true
-
-USER $APP_UID
-
-# No ENTRYPOINT: the orchestrator runs one bundle per job step (identity, catalog, inventory).
