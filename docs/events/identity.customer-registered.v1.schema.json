@@ -1,0 +1,56 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "urn:ecommerce:events:identity.customer-registered:v1",
+    "title": "identity.customer-registered v1",
+    "description": "A customer registered themselves. Raised next to identity.user-registered, which carries no personal data; this event carries the e-mail and what the customer typed, so only the Customers context (to create the profile) binds to it. PERSONAL DATA: never log the body or put it in telemetry. Consumers must ignore properties they do not know: adding one is a backward-compatible change.",
+    "type": "object",
+    "required": ["eventId", "aggregateId", "aggregateVersion", "occurredAt", "email"],
+    "properties": {
+        "eventId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Unique per occurrence; the message-id consumers deduplicate on."
+        },
+        "aggregateId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "The account identifier, which is also the identifier of the customer profile."
+        },
+        "aggregateVersion": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Version of the aggregate after the change; detects gaps and reordering."
+        },
+        "occurredAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "UTC."
+        },
+        "email": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 254,
+            "description": "Normalized e-mail of the account (lowercase). Personal data."
+        },
+        "fullName": {
+            "type": ["string", "null"],
+            "maxLength": 512,
+            "description": "Name as typed at registration, trimmed; null when none was given. The consumer applies its own rules and leaves the field out when it breaks them. Personal data."
+        },
+        "phone": {
+            "type": ["string", "null"],
+            "maxLength": 64,
+            "description": "Phone as typed at registration (expected in E.164 form); null when none was given. Personal data."
+        },
+        "locale": {
+            "type": ["string", "null"],
+            "maxLength": 32,
+            "description": "Preferred locale as typed at registration; null when none was given."
+        },
+        "timeZone": {
+            "type": ["string", "null"],
+            "maxLength": 128,
+            "description": "IANA time zone as typed at registration; null when none was given."
+        }
+    }
+}
