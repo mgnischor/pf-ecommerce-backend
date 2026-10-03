@@ -21,6 +21,7 @@ $ErrorActionPreference = 'Stop'
 Set-Location (Join-Path $PSScriptRoot '..')
 
 dotnet tool restore | Out-Null
+if ($LASTEXITCODE -ne 0) { throw 'dotnet tool restore failed.' }
 New-Item -ItemType Directory -Force $Output | Out-Null
 
 $contexts = Get-ChildItem -Path 'src/*/Infrastructure/Persistence/*DbContext.cs' |
