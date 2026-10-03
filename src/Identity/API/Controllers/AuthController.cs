@@ -111,7 +111,14 @@ internal sealed class AuthController(
     public async Task<IActionResult> Register([FromBody] RegisterRequest request, CancellationToken cancellationToken)
     {
         var result = await register.HandleAsync(
-            new RegisterCustomerCommand(request.Email, request.Password),
+            new RegisterCustomerCommand(
+                request.Email,
+                request.Password,
+                request.FullName,
+                request.Phone,
+                request.Locale,
+                request.TimeZone
+            ),
             cancellationToken
         );
         return result.IsFailure
