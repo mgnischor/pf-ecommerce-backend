@@ -7,6 +7,8 @@ using Microsoft.Extensions.Configuration.Json;
 using Microsoft.Extensions.FileProviders;
 using Portfolio.Catalog;
 using Portfolio.Catalog.Infrastructure;
+using Portfolio.Customers;
+using Portfolio.Customers.Infrastructure;
 using Portfolio.Identity;
 using Portfolio.Identity.Infrastructure;
 using Portfolio.Inventory;
@@ -55,6 +57,7 @@ builder.Services.AddPostgres(builder.Configuration, builder.Environment);
 builder.Services.AddValkey(builder.Configuration);
 builder.Services.AddIdentityModule(builder.Configuration, builder.Environment);
 builder.Services.AddCatalogModule(builder.Environment);
+builder.Services.AddCustomersModule(builder.Environment);
 builder.Services.AddInventoryModule(builder.Environment);
 AddMessaging(builder);
 builder
@@ -140,6 +143,7 @@ static void AddMessaging(WebApplicationBuilder builder)
     if (relays)
     {
         builder.Services.AddOutboxRelay<CatalogDbContext, RabbitMqOutboxPublisher>(builder.Configuration);
+        builder.Services.AddOutboxRelay<CustomersDbContext, RabbitMqOutboxPublisher>(builder.Configuration);
         builder.Services.AddOutboxRelay<IdentityDbContext, RabbitMqOutboxPublisher>(builder.Configuration);
         builder.Services.AddOutboxRelay<InventoryDbContext, RabbitMqOutboxPublisher>(builder.Configuration);
     }
