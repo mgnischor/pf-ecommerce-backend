@@ -85,7 +85,10 @@ public sealed class PersistenceApiTests(AuthFixture fixture) : IClassFixture<Aut
             JOIN identity.users u ON u.id = o.aggregate_id
             """ + $" WHERE u.email = '{email}'"
         );
-        types.ShouldHaveSingleItem().ShouldEndWith(".UserRegistered");
+        // A self-registration writes both events with the account, in one commit (BR-CUS-006).
+        types.Count.ShouldBe(2);
+        types.ShouldContain(type => type.EndsWith(".UserRegistered", StringComparison.Ordinal));
+        types.ShouldContain(type => type.EndsWith(".CustomerRegistered", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -95,11 +98,31 @@ public sealed class PersistenceApiTests(AuthFixture fixture) : IClassFixture<Aut
         using var created = await RegisterAsync(NewEmail(), password);
 
         var payloads = await fixture.Factory.Database.StringsAsync(
-            "SELECT payload::text FROM identity.outbox_messages WHERE type LIKE '%UserRegistered'"
+            "SELECT payload::text FROM identity.outbox_messages"
         );
 
         payloads.ShouldAllBe(payload => !payload.Contains(password, StringComparison.Ordinal));
         payloads.ShouldAllBe(payload => !payload.Contains("argon2", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public async Task Should_keep_the_email_out_of_the_event_every_consumer_of_accounts_receives()
+    {
+        var email = NewEmail();
+        using var created = await RegisterAsync(email, ApiFactory.RandomPassword());
+
+        var payloads = await fixture.Factory.Database.StringsAsync(
+            "SELECT o.payload::text FROM identity.outbox_messages o JOIN identity.users u ON u.id = o.aggregate_id"
+                + $" WHERE u.email = '{email}' AND o.type LIKE '%.UserRegistered'"
+        );
+        var customerEvent = await fixture.Factory.Database.StringsAsync(
+            "SELECT o.payload::text FROM identity.outbox_messages o JOIN identity.users u ON u.id = o.aggregate_id"
+                + $" WHERE u.email = '{email}' AND o.type LIKE '%.CustomerRegistered'"
+        );
+
+        payloads.ShouldHaveSingleItem().ShouldNotContain(email, Case.Insensitive);
+        // The event that does carry the e-mail is the one only the Customers queue binds to.
+        customerEvent.ShouldHaveSingleItem().ShouldContain(email);
     }
 
     [Fact]
