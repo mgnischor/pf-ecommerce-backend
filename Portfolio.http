@@ -28,14 +28,18 @@
 ### Identity (public access unless stated)
 ### ========================================================================
 
-### 1. Register a customer account (anonymous; always created at the public level; rate limited)
+### 1. Register a customer account (anonymous; always created at the public level; rate limited; fullName, phone, locale and timeZone are optional and create the profile)
 POST {{ApiBase}}/auth/registrations
 Content-Type: application/json
 Accept: application/json
 
 {
     "email": "{{Email}}",
-    "password": "{{Password}}"
+    "password": "{{Password}}",
+    "fullName": "Ana Souza",
+    "phone": "+5511987654321",
+    "locale": "pt-BR",
+    "timeZone": "America/Sao_Paulo"
 }
 
 ### 2. Sign in (anonymous; rate limited; 5 failures lock the account for 15 minutes)
@@ -348,10 +352,24 @@ GET {{ApiBase}}/customers/me
 Authorization: Bearer {{Token}}
 Accept: application/json
 
+### 35. Change my profile (JSON Merge Patch; If-Match required; "phone": null removes the phone)
+PATCH {{ApiBase}}/customers/me
+Authorization: Bearer {{Token}}
+If-Match: {{ETag}}
+Content-Type: application/merge-patch+json
+Accept: application/json
+
+{
+    "fullName": "Ana Souza",
+    "phone": "+5511987654321",
+    "locale": "pt-BR",
+    "timeZone": "America/Sao_Paulo"
+}
+
 ### ========================================================================
 ### Development only
 ### ========================================================================
 
-### 35. OpenAPI document
+### 36. OpenAPI document
 GET {{ApiBase}}/openapi/v1.json
 Accept: application/json
