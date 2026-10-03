@@ -110,13 +110,13 @@ API reference (development):
 
 Connection strings, endpoints, credentials, and feature flags are externalized via environment variables / user secrets. Never commit secrets.
 
-| Setting                       | Description                                                                                                                                                               |
-| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ConnectionStrings__Postgres` | PostgreSQL connection string (Npgsql). **Required**: the host refuses to start without it. Pool, timeout, and retry settings live under `Database:*` (`docs/database.md`) |
-| `ConnectionStrings__Valkey`   | Valkey connection string. **Required**: the host refuses to start without it. Tuning and failure mode live under `Valkey:*` (`docs/caching.md`)                           |
-| `ConnectionStrings__RabbitMQ` | RabbitMQ connection string                                                                                                                                                |
-| `OTEL_EXPORTER_OTLP_ENDPOINT` | OpenTelemetry Collector endpoint; nothing is exported without it. Other `OTEL_*` variables are standard (`docs/observability.md`)                                         |
-| `AllowedHosts`                | Semicolon-separated host names the API answers to. Defaults to `localhost` (`*` only in `Development`); **set it to the real host names in every other environment**      |
+| Setting                       | Description                                                                                                                                                                                                                                                |
+| ----------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ConnectionStrings__Postgres` | PostgreSQL connection string (Npgsql). **Required**: the host refuses to start without it. Pool, timeout, and retry settings live under `Database:*` (`docs/database.md`)                                                                                  |
+| `ConnectionStrings__Valkey`   | Valkey connection string. **Required**: the host refuses to start without it. Tuning and failure mode live under `Valkey:*` (`docs/caching.md`)                                                                                                            |
+| `ConnectionStrings__RabbitMQ` | RabbitMQ connection string                                                                                                                                                                                                                                 |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | OpenTelemetry Collector endpoint; nothing is exported without it. Other `OTEL_*` variables are standard (`docs/observability.md`)                                                                                                                          |
+| `AllowedHosts`                | Semicolon-separated host names the API answers to. Defaults to `localhost` (`*` only in `Development`); **set it to the real host names in every other environment, keeping `localhost` in the list** (the container health probes send `Host: localhost`) |
 
 Non-secret defaults live in `configuration/appsettings.json` and `configuration/appsettings.{Environment}.json`; the
 composition root loads them explicitly (the default host only probes the content root). User secrets, environment
@@ -245,13 +245,15 @@ local PostgreSQL or RabbitMQ. The `.env` account (`DEV_ACCOUNT_EMAIL`) is create
 
 ```bash
 bash scripts/init-secrets.sh prod --admin-email admin@example.com   # writes ./secrets/*
-cp .env.prod.example .env.prod                                      # API_IMAGE, MIGRATIONS_IMAGE, API_ALLOWED_HOSTS, JWT_ISSUER
-docker compose --env-file .env.prod -f docker-compose-prod.yml up -d
+cp .env.prod.example .env.prod                                      # API_ALLOWED_HOSTS, JWT_ISSUER
+docker compose --env-file .env.prod -f docker-compose-prod.yml up -d --build   # builds the images on this host
 ```
 
 Before the API starts, one-shot jobs provision the database roles and schemas, run one EF Core migrations bundle per
 bounded context as `app_migrator`, and grant the runtime role; the API then connects as `app_runtime`, which cannot
-change the schema (`docs/database.md`, "Deployment"). `MIGRATIONS_IMAGE` is built from the Dockerfile target `migrations`.
+change the schema (`docs/database.md`, "Deployment"). The migrations image is built from the Dockerfile target
+`migrations`. Both images are built on the host (`docs/container-exceptions.md`, EX-007); set `API_IMAGE` and
+`MIGRATIONS_IMAGE` in `.env.prod` only to deploy from a registry.
 
 `--env-file` keeps the development `.env` out of the production stack. TLS terminates at an external reverse proxy
 that forwards to the API port; it must never route `/health/*` or the observability backends to the internet. Only the
