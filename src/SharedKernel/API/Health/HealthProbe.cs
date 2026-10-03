@@ -29,7 +29,8 @@ internal static partial class HealthProbe
 
     /// <summary>
     /// Builds the probe URL from <c>ASPNETCORE_URLS</c>: the first <c>http</c> endpoint's port, on <c>localhost</c>
-    /// (the host name the default <c>AllowedHosts</c> accepts), or <see cref="DefaultPort"/> when none is set.
+    /// (host filtering answers 400 to a <c>Host</c> not in <c>AllowedHosts</c>, so a deployment that lists only its public
+    /// host names must keep <c>localhost</c> in the list), or <see cref="DefaultPort"/> when none is set.
     /// </summary>
     /// <param name="urls">The <c>ASPNETCORE_URLS</c> value, if any.</param>
     public static Uri ResolveUrl(string? urls)
