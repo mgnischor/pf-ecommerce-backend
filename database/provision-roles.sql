@@ -55,7 +55,7 @@ DECLARE
     schema_name text;
 BEGIN
     -- One schema per bounded context that has persistence, named after it (ai/DATABASE.md §5).
-    FOREACH schema_name IN ARRAY ARRAY['identity', 'catalog', 'inventory']
+    FOREACH schema_name IN ARRAY ARRAY['identity', 'catalog', 'inventory', 'customers']
     LOOP
         EXECUTE format('CREATE SCHEMA IF NOT EXISTS %I AUTHORIZATION app_migrator', schema_name);
         EXECUTE format('ALTER SCHEMA %I OWNER TO app_migrator', schema_name);
