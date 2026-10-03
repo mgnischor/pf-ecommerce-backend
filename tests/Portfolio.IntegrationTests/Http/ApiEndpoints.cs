@@ -68,6 +68,7 @@ internal static class ApiEndpoints
         ),
         ("GET", "api/v1/orders/{orderId:guid}/shipments", $"/api/v1/orders/{Id}/shipments", "public"),
         ("GET", "api/v1/customers/me", "/api/v1/customers/me", "public"),
+        ("PATCH", "api/v1/customers/me", "/api/v1/customers/me", "public"),
     ];
 
     /// <summary>Theory data: method and URL of every endpoint that requires authentication.</summary>
