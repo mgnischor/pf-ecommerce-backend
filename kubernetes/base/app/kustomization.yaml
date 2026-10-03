@@ -25,8 +25,9 @@ configMapGenerator:
       literals:
           - ASPNETCORE_ENVIRONMENT=Production
           - Hosting__ShutdownTimeout=00:00:25
-          # Replaced by every overlay: the public host name(s) and the "iss" claim of every access token.
-          - AllowedHosts=api.example.com
+          # Replaced by every overlay: the public host name(s) and the "iss" claim of every access token. Keep ";localhost" in
+          # AllowedHosts: the probes of the Deployments send "Host: localhost".
+          - AllowedHosts=api.example.com;localhost
           - Jwt__Issuer=https://api.example.com
           - Jwt__ActiveKeyId=key-1
           - Jwt__Keys__0__Id=key-1
