@@ -70,7 +70,7 @@ services:
             rabbitmq:
                 condition: service_healthy
             otel-lgtm:
-                condition: service_healthy
+                condition: service_started # telemetry never gates the application (ai/OBSERVABILITY.md §20.11)
         networks:
             - backend
         logging: &logging
@@ -126,7 +126,7 @@ services:
             rabbitmq:
                 condition: service_healthy
             otel-lgtm:
-                condition: service_healthy
+                condition: service_started
         networks:
             - backend
         logging: *logging
@@ -186,11 +186,10 @@ services:
             REDISCLI_AUTH: "${VALKEY_PASSWORD}"
         ports:
             - "127.0.0.1:${VALKEY_PORT:-6379}:6379"
-        volumes:
-            - valkeydata:/data
         read_only: true
         tmpfs:
             - /tmp:size=16m,mode=1777
+            - /data:size=16m,uid=999,gid=1000 # working directory; nothing is persisted
         cap_drop: [ALL]
         security_opt:
             - no-new-privileges:true
@@ -278,7 +277,6 @@ services:
 
 volumes:
     pgdata:
-    valkeydata:
     rabbitmqdata:
     lgtmdata:
 
