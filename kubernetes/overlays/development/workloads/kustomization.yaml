@@ -22,7 +22,7 @@ configMapGenerator:
     - name: ecommerce-config
       behavior: merge
       literals:
-          - AllowedHosts=api.dev.example.com
+          - AllowedHosts=api.dev.example.com;localhost
           - Jwt__Issuer=https://api.dev.example.com
           - OTEL_RESOURCE_ATTRIBUTES_STATIC=deployment.environment.name=development,app.owner=team-platform
 
