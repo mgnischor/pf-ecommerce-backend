@@ -7,6 +7,9 @@
 # Existing files are never overwritten. Both targets are untracked (.gitignore). Requires openssl.
 set -euo pipefail
 
+# Both targets are paths relative to the repository root, wherever the script is started from.
+cd "$(dirname "$0")/.."
+
 mode="${1:-}"
 admin_email=""
 shift || true
@@ -76,8 +79,14 @@ EOF
         write_secret conn_rabbitmq.txt "amqp://app:$rabbit@rabbitmq:5672"
         if [ ! -e secrets/jwt_es384_private_key.pem ]; then
             umask 077
-            openssl ecparam -name secp384r1 -genkey -noout | openssl pkcs8 -topk8 -nocrypt -out secrets/jwt_es384_private_key.pem
-            chmod 0444 secrets/jwt_es384_private_key.pem
+            # Written to a temporary name and renamed, so a failed run never leaves a truncated key that the next
+            # run would keep because the file "already exists".
+            pem="$(mktemp secrets/.jwt_es384_private_key.XXXXXX)"
+            trap 'rm -f "$pem"' EXIT
+            openssl ecparam -name secp384r1 -genkey -noout | openssl pkcs8 -topk8 -nocrypt -out "$pem"
+            chmod 0444 "$pem"
+            mv "$pem" secrets/jwt_es384_private_key.pem
+            trap - EXIT
             echo "created secrets/jwt_es384_private_key.pem"
         else
             echo "keep    secrets/jwt_es384_private_key.pem (already exists)"
