@@ -2,6 +2,7 @@ using Microsoft.Extensions.Time.Testing;
 using Npgsql;
 using Portfolio.Catalog.Domain;
 using Portfolio.Catalog.Infrastructure;
+using Portfolio.Customers.Infrastructure;
 using Portfolio.Identity.Infrastructure;
 using Portfolio.Inventory.Infrastructure;
 using Portfolio.SharedKernel.Domain;
@@ -33,6 +34,8 @@ public abstract class DatabaseTestBase : IDisposable
     internal CatalogDbContext Catalog() => Track(TestContexts.Catalog(DataSource, Clock));
 
     internal InventoryDbContext Inventory() => Track(TestContexts.Inventory(DataSource, Clock));
+
+    internal CustomersDbContext Customers() => Track(TestContexts.Customers(DataSource, Clock));
 
     internal Product NewProduct(string sku = "CAF-600-PRT", decimal price = 189.90m) =>
         Product
