@@ -2,6 +2,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using Json.Schema;
 using Portfolio.Catalog.Domain;
+using Portfolio.Customers.Infrastructure;
 using Portfolio.Identity.Domain;
 using Portfolio.Inventory.Domain;
 using Portfolio.Inventory.Infrastructure;
@@ -27,6 +28,17 @@ public sealed class EventContractTests
         new ProductPriceChanged(Id, Id, 2, At, Price, new Money(199m, "BRL")),
         new ProductStatusChanged(Id, Id, 3, At, ProductStatus.Draft, ProductStatus.Active),
         new UserRegistered(Id, Id, 1, At, AccessLevel.Public),
+        new CustomerRegistered(
+            Id,
+            Id,
+            1,
+            At,
+            "ana.souza@example.com",
+            "Ana Souza",
+            "+5511987654321",
+            "pt-BR",
+            "America/Sao_Paulo"
+        ),
         new UserAccessLevelChanged(Id, Id, 2, At, AccessLevel.Public, AccessLevel.Manager),
         new UserDeactivated(Id, Id, 3, At),
         new UserTokensRevoked(Id, Id, 4, At),
@@ -164,6 +176,30 @@ public sealed class EventContractTests
         var message = JsonSerializer.Deserialize<ProductCreatedMessage>(json, MessageJson.Options);
 
         message.ShouldNotBeNull().Sku.ShouldBe("CAF-600-PRT");
+    }
+
+    [Fact]
+    public void Should_let_the_customers_consumer_read_the_identity_event_without_sharing_its_type()
+    {
+        var json = Serialize(SampleOf("identity.customer-registered"));
+
+        var message = JsonSerializer.Deserialize<CustomerRegisteredMessage>(json, MessageJson.Options);
+
+        message.ShouldNotBeNull();
+        message.AggregateId.ShouldBe(Id);
+        message.Email.ShouldBe("ana.souza@example.com");
+        message.FullName.ShouldBe("Ana Souza");
+        message.Phone.ShouldBe("+5511987654321");
+        message.Locale.ShouldBe("pt-BR");
+        message.TimeZone.ShouldBe("America/Sao_Paulo");
+    }
+
+    [Fact]
+    public void Should_validate_a_registration_that_gave_no_profile_data_with_null_members()
+    {
+        var empty = new CustomerRegistered(Id, Id, 1, At, "ana.souza@example.com", null, null, null, null);
+
+        IsValid("identity.customer-registered", Serialize(empty)).ShouldBeTrue();
     }
 
     [Fact]
