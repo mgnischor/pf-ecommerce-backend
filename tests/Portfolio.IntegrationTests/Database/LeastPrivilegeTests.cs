@@ -95,6 +95,11 @@ public sealed class LeastPrivilegeTests : IDisposable
             await inventory.Database.MigrateAsync(TestContext.Current.CancellationToken);
         }
 
+        await using (var customers = TestContexts.Customers(migrator))
+        {
+            await customers.Database.MigrateAsync(TestContext.Current.CancellationToken);
+        }
+
         await ProvisionAsync();
     }
 
@@ -114,10 +119,10 @@ public sealed class LeastPrivilegeTests : IDisposable
         await DeployAsync();
 
         var owners = await _database.StringsAsync(
-            "SELECT DISTINCT tableowner FROM pg_tables WHERE schemaname IN ('identity', 'catalog', 'inventory')"
+            "SELECT DISTINCT tableowner FROM pg_tables WHERE schemaname IN ('identity', 'catalog', 'inventory', 'customers')"
         );
         var schemaOwners = await _database.StringsAsync(
-            "SELECT DISTINCT pg_get_userbyid(nspowner) FROM pg_namespace WHERE nspname IN ('identity', 'catalog', 'inventory')"
+            "SELECT DISTINCT pg_get_userbyid(nspowner) FROM pg_namespace WHERE nspname IN ('identity', 'catalog', 'inventory', 'customers')"
         );
 
         owners.ShouldBe(["app_migrator"]);
