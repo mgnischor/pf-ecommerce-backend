@@ -15,7 +15,7 @@ How the platform persists its state: **PostgreSQL** through **Entity Framework C
 | Roles, schemas and grants                                                                                                          | `database/provision-roles.sql`, `database/provision.sh`                                               |
 | Migrations bundles                                                                                                                 | `scripts/build-migrations-bundles.*`, `scripts/apply-migrations.sh`, Dockerfile target `migrations`   |
 
-Contexts without entities yet (Billing, Cart, Checkout, Customers, Notifications, Ordering, Promotions, Reviews, Shipping)
+Contexts without entities yet (Billing, Cart, Checkout, Notifications, Ordering, Promotions, Reviews, Shipping)
 have no `DbContext`: it is created, with its schema and first migration, together with the first entity of the context.
 `PersistenceConventionTests` fails the build if a context's domain entity is not mapped, if a `DbContext` maps another
 context's entity, or if any SQL names another context's schema.
@@ -118,7 +118,7 @@ context's name in snake_case), its design-time factory, its module (`Add<Context
 Migrations are never applied by the API in production. The order, as Compose runs it (`docker-compose-prod.yml`):
 
 1. `db-provision` creates `app_migrator`, `app_runtime`, `app_readonly` and the schemas (owned by `app_migrator`).
-2. `db-migrate-identity` → `db-migrate-catalog` → `db-migrate-inventory` run one bundle each as `app_migrator`
+2. `db-migrate-identity` → `db-migrate-catalog` → `db-migrate-inventory` → `db-migrate-customers` run one bundle each as `app_migrator`
    (image `ecommerce-migrations`, Dockerfile target `migrations`; the connection is the secret file named by
    `PF_DESIGN_TIME_CONNECTION_FILE`, never an argument).
 3. `db-grant` re-runs the provisioning so the runtime and reporting roles are granted on the tables just created and
