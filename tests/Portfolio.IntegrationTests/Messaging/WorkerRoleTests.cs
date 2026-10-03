@@ -147,6 +147,14 @@ public sealed class WorkerRoleTests
             "inventory.open-item-on-product-created.dead",
             cancellationToken: CancellationToken.None
         );
+        await channel.QueueDeleteAsync(
+            "customers.create-profile-on-customer-registered",
+            cancellationToken: CancellationToken.None
+        );
+        await channel.QueueDeleteAsync(
+            "customers.create-profile-on-customer-registered.dead",
+            cancellationToken: CancellationToken.None
+        );
         await channel.ExchangeDeleteAsync($"test-worker-{suffix}", cancellationToken: CancellationToken.None);
         await channel.ExchangeDeleteAsync($"test-worker-{suffix}.dead", cancellationToken: CancellationToken.None);
     }
