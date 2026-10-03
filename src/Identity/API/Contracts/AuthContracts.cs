@@ -29,9 +29,17 @@ internal sealed record TokenResponse(string AccessToken, string TokenType, int E
 /// <summary>Self-registration of a customer. There is deliberately no way to name an access level.</summary>
 /// <param name="Email">Account e-mail.</param>
 /// <param name="Password">Chosen password: 12–128 characters, not breached, not containing the e-mail name.</param>
+/// <param name="FullName">Optional name. It is handed to the customer profile; one that breaks its rules is left out, not rejected.</param>
+/// <param name="Phone">Optional phone as an E.164 number such as <c>+5511987654321</c>.</param>
+/// <param name="Locale">Optional preferred locale: <c>pt-BR</c> or <c>en</c>.</param>
+/// <param name="TimeZone">Optional IANA time zone such as <c>America/Sao_Paulo</c>.</param>
 internal sealed record RegisterRequest(
     [Required, EmailAddress, StringLength(254)] string Email,
-    [Required, StringLength(128)] string Password
+    [Required, StringLength(128)] string Password,
+    [StringLength(512)] string? FullName = null,
+    [StringLength(64)] string? Phone = null,
+    [StringLength(32)] string? Locale = null,
+    [StringLength(128)] string? TimeZone = null
 );
 
 /// <summary>The caller as the API sees them, from the validated token.</summary>
