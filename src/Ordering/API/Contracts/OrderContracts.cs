@@ -41,7 +41,7 @@ internal sealed record OrderSummaryResponse(
     string Number,
     OrderStatusContract Status,
     MoneyResponse Total,
-    DateTimeOffset PlacedAt
+    DateTime PlacedAt
 );
 
 /// <summary>One line of an order, priced as at purchase time.</summary>
@@ -75,7 +75,7 @@ internal sealed record OrderResponse(
     OrderStatusContract Status,
     IReadOnlyList<OrderItemResponse> Items,
     MoneyResponse Total,
-    DateTimeOffset PlacedAt,
+    DateTime PlacedAt,
     int Version,
     IReadOnlyList<string> AllowedActions
 );
