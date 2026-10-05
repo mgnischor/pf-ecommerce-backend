@@ -5,8 +5,9 @@ using Portfolio.SharedKernel.Domain;
 namespace Portfolio.Catalog.Application;
 
 /// <summary>
-/// Discontinues a product (BR-CAT-003). A repeated request is rejected by the state machine as an
-/// invalid transition, never applied twice; concurrent requests are arbitrated by the version token.
+/// Discontinues a product (BR-CAT-003). A repeated request is rejected, never applied twice: with the stale version it
+/// carried, as a failed precondition; with the current one, by the state machine as an invalid transition.
+/// Concurrent requests are arbitrated by the version token.
 /// </summary>
 internal sealed class DiscontinueProductHandler(
     IProductRepository products,
@@ -17,25 +18,34 @@ internal sealed class DiscontinueProductHandler(
     /// <summary>Executes the command.</summary>
     /// <param name="command">Validated request data.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
-    public async Task<Result> HandleAsync(DiscontinueProductCommand command, CancellationToken cancellationToken)
+    /// <returns>The product after the change, or the violated rule.</returns>
+    public async Task<Result<ProductView>> HandleAsync(
+        DiscontinueProductCommand command,
+        CancellationToken cancellationToken
+    )
     {
         ArgumentNullException.ThrowIfNull(command);
 
         var product = await products.GetByIdAsync(command.ProductId, cancellationToken);
         if (product is null)
         {
-            return Result.Failure(ProductErrors.NotFound);
+            return Result<ProductView>.Failure(ProductErrors.NotFound);
+        }
+
+        if (command.ExpectedVersion != product.Version)
+        {
+            return Result<ProductView>.Failure(ProductErrors.VersionMismatch);
         }
 
         var result = product.Discontinue(timeProvider);
         if (result.IsFailure)
         {
-            return result;
+            return Result<ProductView>.Failure(result.Error);
         }
 
         products.Update(product);
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
-        return result;
+        return Result<ProductView>.Success(product.ToView());
     }
 }
