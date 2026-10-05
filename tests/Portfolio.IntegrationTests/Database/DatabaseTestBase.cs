@@ -1,11 +1,14 @@
 using Microsoft.Extensions.Time.Testing;
 using Npgsql;
+using Portfolio.Cart.Infrastructure;
 using Portfolio.Catalog.Domain;
 using Portfolio.Catalog.Infrastructure;
 using Portfolio.Customers.Infrastructure;
 using Portfolio.Identity.Infrastructure;
 using Portfolio.Inventory.Infrastructure;
+using Portfolio.Ordering.Infrastructure;
 using Portfolio.SharedKernel.Domain;
+using Portfolio.Shipping.Infrastructure;
 
 namespace Portfolio.IntegrationTests.Database;
 
@@ -36,6 +39,12 @@ public abstract class DatabaseTestBase : IDisposable
     internal InventoryDbContext Inventory() => Track(TestContexts.Inventory(DataSource, Clock));
 
     internal CustomersDbContext Customers() => Track(TestContexts.Customers(DataSource, Clock));
+
+    internal CartDbContext Cart() => Track(TestContexts.Cart(DataSource, Clock));
+
+    internal OrderingDbContext Ordering() => Track(TestContexts.Ordering(DataSource, Clock));
+
+    internal ShippingDbContext Shipping() => Track(TestContexts.Shipping(DataSource, Clock));
 
     internal Product NewProduct(string sku = "CAF-600-PRT", decimal price = 189.90m) =>
         Product
