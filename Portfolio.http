@@ -123,11 +123,13 @@ Accept: application/json
 ### Catalog
 ### ========================================================================
 
-### 11. List products (anonymous; cursor pagination, filters, sort)
+### 11. List products (anonymous sees active products only; add the Authorization header to see every status)
+# Sort: name, price, createdAt (prefix - for descending). Continue with &cursor=<nextCursor of the previous page>,
+# keeping the same q, sort, and status: a cursor is valid only for the query it was issued for.
 GET {{ApiBase}}/products?limit=20&q=cafeteira&sort=-createdAt
 Accept: application/json
 
-### 12. Get a product
+### 12. Get a product (anonymous sees active products only; draft and discontinued answer 404)
 GET {{ApiBase}}/products/{{ProductId}}
 Accept: application/json
 
