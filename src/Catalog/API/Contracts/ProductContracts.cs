@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using System.Text.Json.Serialization;
 using Portfolio.SharedKernel.API.Contracts;
 
 namespace Portfolio.Catalog.API.Contracts;
@@ -34,14 +35,50 @@ internal sealed record CreateProductRequest(
 
 /// <summary>
 /// Partial update (JSON Merge Patch semantics): omitted members are left unchanged, an explicit
-/// <c>null</c> description clears it. Status, price, and identity cannot be changed here.
+/// <c>null</c> description clears it, and an explicit <c>null</c> name is rejected because a name is required.
+/// Status, price, and identity cannot be changed here.
 /// </summary>
-/// <param name="Name">New display name, 3–200 characters.</param>
-/// <param name="Description">New description, up to 2000 characters; <c>null</c> clears it.</param>
-internal sealed record UpdateProductRequest(
-    [StringLength(200, MinimumLength = 3)] string? Name = null,
-    [StringLength(2000)] string? Description = null
-);
+/// <remarks>
+/// Whether a member was sent cannot be read from its value (<c>null</c> is both "omitted" and "clear"), so the
+/// setters record it: the JSON deserializer calls a setter only for members present in the body.
+/// </remarks>
+internal sealed record UpdateProductRequest
+{
+    private readonly string? _name;
+    private readonly string? _description;
+
+    /// <summary>New display name, 3–200 characters.</summary>
+    [StringLength(200, MinimumLength = 3)]
+    public string? Name
+    {
+        get => _name;
+        init
+        {
+            _name = value;
+            NameSpecified = true;
+        }
+    }
+
+    /// <summary>New description, up to 2000 characters; <c>null</c> clears it.</summary>
+    [StringLength(2000)]
+    public string? Description
+    {
+        get => _description;
+        init
+        {
+            _description = value;
+            DescriptionSpecified = true;
+        }
+    }
+
+    /// <summary>Whether the request named <see cref="Name"/>.</summary>
+    [JsonIgnore]
+    public bool NameSpecified { get; private init; }
+
+    /// <summary>Whether the request named <see cref="Description"/>.</summary>
+    [JsonIgnore]
+    public bool DescriptionSpecified { get; private init; }
+}
 
 /// <summary>Request to change the sell price (BR-CAT-002).</summary>
 /// <param name="Price">New price; must be greater than zero.</param>
@@ -75,12 +112,12 @@ internal sealed record ProductSummaryResponse(
 internal sealed record ProductResponse(
     Guid Id,
     string Name,
-    string? Description,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Description,
     string Sku,
     MoneyResponse Price,
     ProductStatusContract Status,
     int Version,
     IReadOnlyList<string> AllowedActions,
-    DateTimeOffset CreatedAt,
-    DateTimeOffset UpdatedAt
+    DateTime CreatedAt,
+    DateTime UpdatedAt
 );
