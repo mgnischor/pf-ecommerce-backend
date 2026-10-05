@@ -63,6 +63,7 @@ Write-Secret 'valkey_password.txt' $valkey
 Write-Secret 'rabbitmq_credentials.conf' "default_user = app`ndefault_pass = $rabbit"
 Write-Secret 'grafana_admin_password.txt' (New-RandomHex)
 Write-Secret 'identity_token_hash_key.txt' ([Convert]::ToBase64String([System.Security.Cryptography.RandomNumberGenerator]::GetBytes(64)))
+Write-Secret 'pagination_cursor_key.txt' ([Convert]::ToBase64String([System.Security.Cryptography.RandomNumberGenerator]::GetBytes(64)))
 Write-Secret 'bootstrap_admin_email.txt' $AdminEmail
 Write-Secret 'bootstrap_admin_password.txt' (New-RandomHex 16)
 Write-Secret 'conn_postgres.txt' "Host=postgres;Port=5432;Database=ecommerce;Username=app_runtime;Password=$runtime"
