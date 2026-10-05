@@ -98,6 +98,21 @@ public sealed class PostgresFixture : IAsyncLifetime
             await customers.Database.MigrateAsync();
         }
 
+        await using (var cart = TestContexts.Cart(dataSource))
+        {
+            await cart.Database.MigrateAsync();
+        }
+
+        await using (var ordering = TestContexts.Ordering(dataSource))
+        {
+            await ordering.Database.MigrateAsync();
+        }
+
+        await using (var shipping = TestContexts.Shipping(dataSource))
+        {
+            await shipping.Database.MigrateAsync();
+        }
+
         // A template cannot be cloned while a connection to it is open.
         NpgsqlConnection.ClearAllPools();
     }
