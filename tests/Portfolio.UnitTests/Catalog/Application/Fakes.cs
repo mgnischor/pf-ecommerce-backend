@@ -12,11 +12,49 @@ internal sealed class FakeProductRepository : IProductRepository
 
     public int UpdateCalls { get; private set; }
 
+    /// <summary>What <see cref="ListAsync"/> answers; the real ordering and filtering are checked against the SQL.</summary>
+    public List<Product> ListResult { get; } = [];
+
+    /// <summary>The criteria of the last <see cref="ListAsync"/> call.</summary>
+    public ProductListCriteria? LastCriteria { get; private set; }
+
     public Task<Product?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default) =>
         Task.FromResult(_products.FirstOrDefault(product => product.Id == id && !product.IsDeleted));
 
     public Task<Product?> FindBySkuAsync(Sku sku, CancellationToken cancellationToken = default) =>
         Task.FromResult(_products.FirstOrDefault(product => product.Sku == sku && !product.IsDeleted));
+
+    public Task<Product?> FindByCreationKeyAsync(
+        string idempotencyKey,
+        CancellationToken cancellationToken = default
+    ) =>
+        Task.FromResult(
+            _products.FirstOrDefault(product =>
+                string.Equals(product.CreationKey, idempotencyKey, StringComparison.Ordinal)
+            )
+        );
+
+    public Task<bool> WasDeletedByAsync(
+        Guid productId,
+        string idempotencyKey,
+        CancellationToken cancellationToken = default
+    ) =>
+        Task.FromResult(
+            _products.Any(product =>
+                product.Id == productId
+                && product.IsDeleted
+                && string.Equals(product.DeletionKey, idempotencyKey, StringComparison.Ordinal)
+            )
+        );
+
+    public Task<IReadOnlyList<Product>> ListAsync(
+        ProductListCriteria criteria,
+        CancellationToken cancellationToken = default
+    )
+    {
+        LastCriteria = criteria;
+        return Task.FromResult<IReadOnlyList<Product>>(ListResult.Take(criteria.Limit).ToList());
+    }
 
     public Task AddAsync(Product aggregate, CancellationToken cancellationToken = default)
     {
