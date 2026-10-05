@@ -1,13 +1,18 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Json.Schema;
+using Portfolio.Cart.Infrastructure;
 using Portfolio.Catalog.Domain;
 using Portfolio.Customers.Infrastructure;
 using Portfolio.Identity.Domain;
 using Portfolio.Inventory.Domain;
 using Portfolio.Inventory.Infrastructure;
+using Portfolio.Ordering.Domain;
+using Portfolio.Ordering.Infrastructure;
 using Portfolio.SharedKernel.Domain;
 using Portfolio.SharedKernel.Infrastructure;
+using Portfolio.Shipping.Domain;
+using Portfolio.Shipping.Infrastructure;
 
 namespace Portfolio.IntegrationTests.Messaging;
 
@@ -21,12 +26,16 @@ public sealed class EventContractTests
     private static readonly Guid Id = Guid.Parse("0192f7a8-3c5e-7b41-9d0e-6f2a8c4b1e57");
     private static readonly DateTimeOffset At = new(2026, 10, 2, 12, 0, 0, TimeSpan.Zero);
     private static readonly Money Price = new(189.9m, "BRL");
+    private static readonly Guid CustomerId = Guid.Parse("0192f7a8-3c5e-7b41-9d0e-6f2a8c4b1e58");
+    private static readonly Guid ProductId = Guid.Parse("0192f7a8-3c5e-7b41-9d0e-6f2a8c4b1e59");
+    private static readonly Guid ShipmentId = Guid.Parse("0192f7a8-3c5e-7b41-9d0e-6f2a8c4b1e60");
 
     private static readonly IDomainEvent[] Samples =
     [
         new ProductCreated(Id, Id, 1, At, "Cafeteira Elétrica 600ml", "CAF-600-PRT", Price),
         new ProductPriceChanged(Id, Id, 2, At, Price, new Money(199m, "BRL")),
         new ProductStatusChanged(Id, Id, 3, At, ProductStatus.Draft, ProductStatus.Active),
+        new ProductDeleted(Id, Id, 4, At, "CAF-600-PRT"),
         new UserRegistered(Id, Id, 1, At, AccessLevel.Public),
         new CustomerRegistered(
             Id,
@@ -46,6 +55,24 @@ public sealed class EventContractTests
         new StockAdjusted(Id, Id, 2, At, "CAF-600-PRT", -3, "stocktake", 7, 2),
         new StockReserved(Id, Id, 3, At, "CAF-600-PRT", 2, 4, 3),
         new StockReleased(Id, Id, 4, At, "CAF-600-PRT", 1, 3, 4),
+        new OrderPlaced(
+            Id,
+            Id,
+            1,
+            At,
+            CustomerId,
+            "PF-2026-000001",
+            new Money(379.80m, "BRL"),
+            [new OrderPlacedItem(ProductId, "CAF-600-PRT", 2, Price)]
+        ),
+        new OrderPaid(Id, Id, 2, At, CustomerId, "PF-2026-000001"),
+        new OrderShipped(Id, Id, 3, At, CustomerId, "PF-2026-000001"),
+        new OrderDelivered(Id, Id, 4, At, CustomerId, "PF-2026-000001"),
+        new OrderCancelled(Id, Id, 3, At, CustomerId, "PF-2026-000001", "changedMind", true),
+        new ShipmentDispatched(Id, ShipmentId, 2, At, Id, "Correios", "BR123456789", new DateOnly(2026, 10, 9)),
+        new ShipmentDelivered(Id, ShipmentId, 3, At, Id),
+        new ShipmentFailed(Id, ShipmentId, 3, At, Id, "addressNotFound"),
+        new ShipmentCancelled(Id, ShipmentId, 2, At, Id),
     ];
 
     public static TheoryData<string> EventNames()
@@ -179,6 +206,97 @@ public sealed class EventContractTests
     }
 
     [Fact]
+    public void Should_let_the_cart_consumer_read_every_catalog_event_it_uses_without_sharing_their_types()
+    {
+        var created = Read("catalog.product-created");
+        var priceChanged = Read("catalog.product-price-changed");
+        var statusChanged = Read("catalog.product-status-changed");
+        var deleted = Read("catalog.product-deleted");
+
+        (created.AggregateId, created.AggregateVersion, created.Sku, created.Name).ShouldBe(
+            (Id, 1, "CAF-600-PRT", "Cafeteira Elétrica 600ml")
+        );
+        created.Price.ShouldBe(Price);
+        priceChanged.NewPrice.ShouldBe(new Money(199m, "BRL"));
+        (statusChanged.AggregateVersion, statusChanged.To).ShouldBe((3, "active"));
+        (deleted.AggregateVersion, deleted.AggregateId).ShouldBe((4, Id));
+
+        static CatalogProductMessage Read(string routingKey) =>
+            JsonSerializer
+                .Deserialize<CatalogProductMessage>(Serialize(SampleOf(routingKey)), MessageJson.Options)
+                .ShouldNotBeNull();
+    }
+
+    [Fact]
+    public void Should_let_the_shipping_consumer_read_the_order_events_it_uses_without_sharing_their_types()
+    {
+        var placed = Read("ordering.order-placed");
+        var paid = Read("ordering.order-paid");
+        var cancelled = Read("ordering.order-cancelled");
+
+        foreach (var message in new[] { placed, paid, cancelled })
+        {
+            (message.AggregateId, message.CustomerId, message.Number).ShouldBe((Id, CustomerId, "PF-2026-000001"));
+        }
+
+        static OrderEventMessage Read(string routingKey) =>
+            JsonSerializer
+                .Deserialize<OrderEventMessage>(Serialize(SampleOf(routingKey)), MessageJson.Options)
+                .ShouldNotBeNull();
+    }
+
+    [Theory]
+    [InlineData("shipping.shipment-dispatched")]
+    [InlineData("shipping.shipment-delivered")]
+    public void Should_let_the_ordering_consumers_read_the_shipment_events_they_use_without_sharing_their_types(
+        string routingKey
+    )
+    {
+        var message = JsonSerializer.Deserialize<ShipmentEventMessage>(
+            Serialize(SampleOf(routingKey)),
+            MessageJson.Options
+        );
+
+        message.ShouldNotBeNull().OrderId.ShouldBe(Id);
+    }
+
+    [Fact]
+    public void Should_write_the_estimated_delivery_as_a_calendar_date_and_absent_optionals_as_null()
+    {
+        var dispatched = JsonNode.Parse(Serialize(SampleOf("shipping.shipment-dispatched")))!;
+        var withoutOptionals = JsonNode.Parse(
+            Serialize(new ShipmentDispatched(Id, ShipmentId, 2, At, Id, "Correios", null, null))
+        )!;
+
+        dispatched["estimatedDeliveryDate"]!.GetValue<string>().ShouldBe("2026-10-09");
+        withoutOptionals["trackingCode"].ShouldBeNull();
+        withoutOptionals["estimatedDeliveryDate"].ShouldBeNull();
+        IsValid("shipping.shipment-dispatched", withoutOptionals.ToJsonString()).ShouldBeTrue();
+    }
+
+    [Fact]
+    public void Should_carry_the_order_lines_in_the_placed_event_with_money_as_decimal_strings()
+    {
+        var placed = JsonNode.Parse(Serialize(SampleOf("ordering.order-placed")))!;
+
+        placed["total"]!["amount"]!.GetValue<string>().ShouldBe("379.80");
+        var line = placed["items"]!.AsArray().ShouldHaveSingleItem()!;
+        (line["sku"]!.GetValue<string>(), line["quantity"]!.GetValue<int>()).ShouldBe(("CAF-600-PRT", 2));
+        line["unitPrice"]!["amount"]!.GetValue<string>().ShouldBe("189.90");
+    }
+
+    [Fact]
+    public void Should_leave_the_free_text_cancellation_note_out_of_the_event()
+    {
+        var cancelled = JsonNode.Parse(Serialize(SampleOf("ordering.order-cancelled")))!.AsObject();
+
+        cancelled.ContainsKey("note").ShouldBeFalse();
+        (cancelled["reasonCode"]!.GetValue<string>(), cancelled["wasPaid"]!.GetValue<bool>()).ShouldBe(
+            ("changedMind", true)
+        );
+    }
+
+    [Fact]
     public void Should_let_the_customers_consumer_read_the_identity_event_without_sharing_its_type()
     {
         var json = Serialize(SampleOf("identity.customer-registered"));
@@ -209,7 +327,7 @@ public sealed class EventContractTests
         {
             RoutingKeys
                 .For(sample.GetType().FullName!)
-                .ShouldMatch("^(catalog|identity|inventory)[.][a-z]+(-[a-z]+)+$");
+                .ShouldMatch("^(catalog|identity|inventory|ordering|shipping)[.][a-z]+(-[a-z]+)+$");
         }
     }
 }
