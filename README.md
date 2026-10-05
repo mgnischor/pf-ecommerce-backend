@@ -192,7 +192,7 @@ Conventions already in place: cursor pagination (`limit`, `cursor`), `Idempotenc
 `If-Match` preconditions, camelCase JSON with string enums, money as decimal strings, RFC 9457 Problem Details, and
 default-deny authorization (`[AllowAnonymous]` is explicit).
 
-**Status:** authentication, account administration, and the Inventory and Customers endpoints are implemented. The other business
+**Status:** authentication, account administration, and the Catalog, Cart, Ordering, Shipping, Inventory and Customers endpoints are implemented. The remaining business
 endpoints are mapped, validated, and protected, but their use cases are not wired yet, so they answer `501` with
 Problem Details (`code: ENDPOINT_NOT_IMPLEMENTED`) once authorization passes.
 
@@ -204,14 +204,16 @@ explicitly anonymous or names the minimum level it needs; an architecture test f
 integration test calls every protected endpoint as anonymous and as each level. The full rules, the endpoint matrix,
 the token specification, and how to operate the secrets are in `docs/business-rules/identity.md`.
 
-| Setting (secret)                                                           | Description                                                                               |
-| -------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
-| `Jwt__ActiveKeyId`, `Jwt__Keys__0__Id`, `Jwt__Keys__0__PrivateKeyPem`      | ES384 signing key (PKCS#8 PEM). Use `…__PrivateKeyPemFile` for a mounted file             |
-| `Identity__TokenHashKey`                                                   | Base64 key of at least 32 random bytes; refresh tokens are stored only as HMAC-SHA3-512   |
-| `Identity__Bootstrap__Accounts__0__Email`, `…__Password`, `…__AccessLevel` | Accounts created at startup when missing: how the first administrator and developer exist |
+| Setting (secret)                                                           | Description                                                                                    |
+| -------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| `Jwt__ActiveKeyId`, `Jwt__Keys__0__Id`, `Jwt__Keys__0__PrivateKeyPem`      | ES384 signing key (PKCS#8 PEM). Use `…__PrivateKeyPemFile` for a mounted file                  |
+| `Identity__TokenHashKey`                                                   | Base64 key of at least 32 random bytes; refresh tokens are stored only as HMAC-SHA3-512        |
+| `Pagination__CursorKey`                                                    | Base64 key of at least 32 random bytes that signs pagination cursors; shared by every instance |
+| `Identity__Bootstrap__Accounts__0__Email`, `…__Password`, `…__AccessLevel` | Accounts created at startup when missing: how the first administrator and developer exist      |
 
-Outside `Development` the host refuses to start without the signing key and the token-hash key. In `Development` it
-generates throw-away keys, so `dotnet run` works, but tokens stop validating on restart.
+Outside `Development` the host refuses to start without the signing key, the token-hash key, and the cursor key. In
+`Development` it generates throw-away keys, so `dotnet run` works, but tokens and pagination cursors stop validating on
+restart. Every instance of a deployment must share the same cursor key, or a cursor issued by one is refused by another.
 
 ## Containers
 
