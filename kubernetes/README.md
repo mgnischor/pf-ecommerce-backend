@@ -59,6 +59,7 @@ No Secret value is in Git. The `ExternalSecret`s read these containers from the 
 | --------------------------------------------------------------------------------------- | ------------------------------------------------------ | -------------------------------------------------------- |
 | `jwt-signing-key`                                                                       | ES384 private key (PEM)                                | `/run/secrets/jwt_es384_private_key` (API, worker)       |
 | `identity-token-hash-key`                                                               | token HMAC key                                         | `Identity__TokenHashKey`                                 |
+| `pagination-cursor-key`                                                                 | pagination cursor HMAC key (Base64, ≥ 32 bytes)        | `Pagination__CursorKey`                                  |
 | `postgres-runtime-connection`                                                           | `app_runtime` connection string, TLS required          | `ConnectionStrings__Postgres`                            |
 | `valkey-connection`                                                                     | Valkey connection string with password and TLS         | `ConnectionStrings__Valkey`                              |
 | `rabbitmq-credentials`                                                                  | JSON `{"username","password"}`                         | `ConnectionStrings__RabbitMQ`, broker default user, KEDA |
