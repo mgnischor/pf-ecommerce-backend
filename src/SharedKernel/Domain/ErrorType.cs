@@ -3,7 +3,8 @@ namespace Portfolio.SharedKernel.Domain;
 /// <summary>
 /// Category of a domain failure. The API boundary maps it to an HTTP status
 /// (<see cref="Validation"/> → 422, <see cref="NotFound"/> → 404, <see cref="Conflict"/> → 409,
-/// <see cref="Unauthorized"/> → 401, <see cref="Forbidden"/> → 403, <see cref="PreconditionFailed"/> → 412).
+/// <see cref="Unauthorized"/> → 401, <see cref="Forbidden"/> → 403, <see cref="PreconditionFailed"/> → 412,
+/// <see cref="BadRequest"/> → 400).
 /// </summary>
 internal enum ErrorType
 {
@@ -24,4 +25,7 @@ internal enum ErrorType
 
     /// <summary>The caller acted on a stale or malformed version of the resource (<c>If-Match</c> did not match).</summary>
     PreconditionFailed = 5,
+
+    /// <summary>The request is malformed in a way that is not a business-rule violation, such as a forged cursor.</summary>
+    BadRequest = 6,
 }
