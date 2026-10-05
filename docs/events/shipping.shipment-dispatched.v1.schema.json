@@ -1,0 +1,49 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "urn:ecommerce:events:shipping.shipment-dispatched:v1",
+    "title": "shipping.shipment-dispatched v1",
+    "description": "The carrier took a shipment. Ordering moves the order to shipped on it. The tracking code and the estimated delivery are null when the carrier gave none. Consumers must ignore properties they do not know: adding one is a backward-compatible change.",
+    "type": "object",
+    "required": ["eventId", "aggregateId", "aggregateVersion", "occurredAt", "orderId", "carrier"],
+    "properties": {
+        "eventId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Unique per occurrence; the message-id consumers deduplicate on."
+        },
+        "aggregateId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "The shipment."
+        },
+        "aggregateVersion": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Version of the aggregate after the change; detects gaps and reordering."
+        },
+        "occurredAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "UTC."
+        },
+        "orderId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "The order the shipment fulfills."
+        },
+        "carrier": {
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 60
+        },
+        "trackingCode": {
+            "type": ["string", "null"],
+            "maxLength": 64
+        },
+        "estimatedDeliveryDate": {
+            "type": ["string", "null"],
+            "format": "date",
+            "description": "Calendar date, YYYY-MM-DD."
+        }
+    }
+}
