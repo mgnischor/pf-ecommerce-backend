@@ -75,7 +75,7 @@ public sealed class ObservabilityTests(TelemetryFixture fixture) : IClassFixture
             "the product list"
         );
 
-        response.StatusCode.ShouldBe(HttpStatusCode.NotImplemented);
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
         Tag(span, "app.bounded_context").ShouldBe("catalog");
         Tag(span, "app.actor.id").ShouldBeNull();
     }
