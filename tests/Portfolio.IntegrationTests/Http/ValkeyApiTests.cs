@@ -190,7 +190,7 @@ public sealed class ValkeyApiTests(AuthFixture fixture) : IClassFixture<AuthFixt
         using var catalog = await client.GetAsync(new Uri("/api/v1/products", UriKind.Relative), Cancel);
 
         me.StatusCode.ShouldBe(HttpStatusCode.Unauthorized);
-        catalog.StatusCode.ShouldBe(HttpStatusCode.NotImplemented); // Reached the endpoint: no cache or blocklist involved.
+        catalog.StatusCode.ShouldBe(HttpStatusCode.OK); // Reached the use case: no cache or blocklist involved.
     }
 
     [Fact]
