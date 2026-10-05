@@ -66,12 +66,19 @@ public sealed class ApiSurfaceTests : IDisposable
     [Fact]
     public async Task Should_answer_a_mapped_but_unimplemented_operation_with_a_problem_details_501()
     {
+        // The payment webhook is anonymous, so it reaches the stub without credentials.
         using var client = _production.CreateClient();
+        using var content = Json("""{"id":"evt_test_0001","type":"payment.captured"}""");
+        using var request = new HttpRequestMessage(
+            HttpMethod.Post,
+            new Uri("/api/v1/payments/webhooks/example-provider", UriKind.Relative)
+        )
+        {
+            Content = content,
+        };
+        request.Headers.Add("X-Webhook-Signature", "sha256=0000");
 
-        using var response = await client.GetAsync(
-            new Uri("/api/v1/products", UriKind.Relative),
-            TestContext.Current.CancellationToken
-        );
+        using var response = await client.SendAsync(request, TestContext.Current.CancellationToken);
         using var body = JsonDocument.Parse(
             await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken)
         );
@@ -80,14 +87,14 @@ public sealed class ApiSurfaceTests : IDisposable
         response.Content.Headers.ContentType?.MediaType.ShouldBe("application/problem+json");
         body.RootElement.GetProperty("status").GetInt32().ShouldBe(501);
         body.RootElement.GetProperty("code").GetString().ShouldBe("ENDPOINT_NOT_IMPLEMENTED");
-        body.RootElement.GetProperty("instance").GetString().ShouldBe("/api/v1/products");
+        body.RootElement.GetProperty("instance").GetString().ShouldBe("/api/v1/payments/webhooks/example-provider");
         body.RootElement.TryGetProperty("traceId", out _).ShouldBeTrue();
     }
 
     [Theory]
-    [InlineData("/api/v1/products/0199f3a2-7c10-7d3e-8a51-2b9d4c6e1f01")]
-    [InlineData("/api/v1/products?limit=100&sort=-price&q=cafeteira")]
-    public async Task Should_serve_the_anonymous_catalog_reads_without_credentials(string url)
+    [InlineData("/api/v1/products/0199f3a2-7c10-7d3e-8a51-2b9d4c6e1f01", HttpStatusCode.NotFound)]
+    [InlineData("/api/v1/products?limit=100&sort=-price&q=cafeteira", HttpStatusCode.OK)]
+    public async Task Should_serve_the_anonymous_catalog_reads_without_credentials(string url, HttpStatusCode expected)
     {
         using var client = _production.CreateClient();
 
@@ -96,7 +103,9 @@ public sealed class ApiSurfaceTests : IDisposable
             TestContext.Current.CancellationToken
         );
 
-        response.StatusCode.ShouldBe(HttpStatusCode.NotImplemented);
+        // Reaching the use case at all (a 200 page, or a 404 for a product that does not exist) proves the read
+        // is open: a 401 or 403 would mean the endpoint demanded credentials.
+        response.StatusCode.ShouldBe(expected);
     }
 
     [Fact]
