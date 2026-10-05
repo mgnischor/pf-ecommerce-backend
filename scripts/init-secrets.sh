@@ -71,6 +71,7 @@ EOF
         write_secret rabbitmq_credentials.conf "default_user = app"$'\n'"default_pass = $rabbit"
         write_secret grafana_admin_password.txt "$(random)"
         write_secret identity_token_hash_key.txt "$(openssl rand -base64 64 | tr -d '\n')"
+        write_secret pagination_cursor_key.txt "$(openssl rand -base64 64 | tr -d '\n')"
         write_secret bootstrap_admin_email.txt "$admin_email"
         write_secret bootstrap_admin_password.txt "$(random 16)"
         write_secret conn_postgres.txt "Host=postgres;Port=5432;Database=ecommerce;Username=app_runtime;Password=$runtime"
