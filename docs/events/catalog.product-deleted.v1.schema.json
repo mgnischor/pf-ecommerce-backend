@@ -1,0 +1,34 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "urn:ecommerce:events:catalog.product-deleted:v1",
+    "title": "catalog.product-deleted v1",
+    "description": "A product was logically deleted and is no longer sellable. Consumers must ignore properties they do not know: adding one is a backward-compatible change.",
+    "type": "object",
+    "required": ["eventId", "aggregateId", "aggregateVersion", "occurredAt", "sku"],
+    "properties": {
+        "eventId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Unique per occurrence; the message-id consumers deduplicate on."
+        },
+        "aggregateId": {
+            "type": "string",
+            "format": "uuid"
+        },
+        "aggregateVersion": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Version of the aggregate after the change; detects gaps and reordering."
+        },
+        "occurredAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "UTC."
+        },
+        "sku": {
+            "type": "string",
+            "pattern": "^[A-Z0-9_-]{4,32}$",
+            "description": "The SKU the deleted product held, now released."
+        }
+    }
+}
