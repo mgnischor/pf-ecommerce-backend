@@ -17,6 +17,7 @@ internal sealed class CatalogMetricsSubscriber : IDomainEventSubscriber
     private readonly Counter<long> _created;
     private readonly Counter<long> _statusChanges;
     private readonly Counter<long> _priceChanges;
+    private readonly Counter<long> _deleted;
 
     /// <summary>Creates the subscriber and its instruments.</summary>
     /// <param name="meterFactory">Creates the meter, disposed with the host.</param>
@@ -39,6 +40,11 @@ internal sealed class CatalogMetricsSubscriber : IDomainEventSubscriber
             "catalog.products.price_changes",
             unit: "{change}",
             description: "Sell prices changed."
+        );
+        _deleted = meter.CreateCounter<long>(
+            "catalog.products.deleted",
+            unit: "{product}",
+            description: "Products logically deleted."
         );
     }
 
@@ -64,6 +70,9 @@ internal sealed class CatalogMetricsSubscriber : IDomainEventSubscriber
                 break;
             case ProductPriceChanged:
                 _priceChanges.Add(1, Context);
+                break;
+            case ProductDeleted:
+                _deleted.Add(1, Context);
                 break;
         }
 
