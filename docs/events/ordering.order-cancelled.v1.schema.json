@@ -1,0 +1,57 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "urn:ecommerce:events:ordering.order-cancelled:v1",
+    "title": "ordering.order-cancelled v1",
+    "description": "An order was cancelled before it was shipped. wasPaid tells whether money has to be returned. The free-text note the customer may have typed is deliberately not part of the event. Consumers must ignore properties they do not know: adding one is a backward-compatible change.",
+    "type": "object",
+    "required": [
+        "eventId",
+        "aggregateId",
+        "aggregateVersion",
+        "occurredAt",
+        "customerId",
+        "number",
+        "reasonCode",
+        "wasPaid"
+    ],
+    "properties": {
+        "eventId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Unique per occurrence; the message-id consumers deduplicate on."
+        },
+        "aggregateId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "The order."
+        },
+        "aggregateVersion": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Version of the aggregate after the change; detects gaps and reordering."
+        },
+        "occurredAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "UTC."
+        },
+        "customerId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "The account that owns the order."
+        },
+        "number": {
+            "type": "string",
+            "pattern": "^PF-[0-9]{4}-[0-9]{6,}$"
+        },
+        "reasonCode": {
+            "type": "string",
+            "pattern": "^[A-Za-z][A-Za-z0-9_]{1,31}$",
+            "description": "Machine-readable reason, such as changedMind."
+        },
+        "wasPaid": {
+            "type": "boolean",
+            "description": "Whether the order had been paid when it was cancelled."
+        }
+    }
+}
