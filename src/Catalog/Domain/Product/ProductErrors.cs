@@ -63,4 +63,17 @@ internal static class ProductErrors
 
     /// <summary>The product does not exist (or was deleted).</summary>
     public static Error NotFound => Error.NotFound("PRODUCT_NOT_FOUND");
+
+    /// <summary>The <c>If-Match</c> version is stale or malformed: the product changed since the client read it.</summary>
+    public static Error VersionMismatch => Error.PreconditionFailed("PRODUCT_VERSION_MISMATCH");
+
+    /// <summary>BR-CAT-008: the idempotency key was already used for a different request.</summary>
+    public static Error IdempotencyKeyReused => Error.Validation("IDEMPOTENCY_KEY_REUSED", ruleId: "BR-CAT-008");
+
+    /// <summary>BR-CAT-006: the requested sort field is not one of the allowed ones.</summary>
+    public static Error SortFieldNotAllowed =>
+        Error.BadRequest("SORT_FIELD_NOT_ALLOWED", "sort", ErrorParameters.Of(("allowed", "name, price, createdAt")));
+
+    /// <summary>BR-CAT-006: the cursor is malformed, forged, or was issued for another query.</summary>
+    public static Error CursorInvalid => Error.BadRequest("PAGE_CURSOR_INVALID", "cursor");
 }
