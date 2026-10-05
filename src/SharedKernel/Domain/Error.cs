@@ -64,6 +64,16 @@ internal sealed record Error(
     public static Error PreconditionFailed(string code, IReadOnlyDictionary<string, object>? parameters = null) =>
         new(ErrorType.PreconditionFailed, code, Parameters: parameters);
 
+    /// <summary>Creates a failure for a malformed request that is not a business-rule violation (a forged cursor, an unknown sort field).</summary>
+    /// <param name="code">Stable error code.</param>
+    /// <param name="field">Query parameter or field that is malformed.</param>
+    /// <param name="parameters">Message parameters.</param>
+    public static Error BadRequest(
+        string code,
+        string? field = null,
+        IReadOnlyDictionary<string, object>? parameters = null
+    ) => new(ErrorType.BadRequest, code, field, Parameters: parameters);
+
     /// <summary>Value equality, including the message parameters (dictionaries compare by content).</summary>
     /// <param name="other">Error to compare with.</param>
     public bool Equals(Error? other) =>
