@@ -1,7 +1,6 @@
 using System.Net.Http.Json;
 using System.Text.Json;
 using Portfolio.IntegrationTests.Http;
-using RabbitMQ.Client;
 
 namespace Portfolio.IntegrationTests.Messaging;
 
@@ -15,49 +14,15 @@ public sealed class CustomerRegistrationFlowTests
 {
     private static CancellationToken Cancel => TestContext.Current.CancellationToken;
 
-    private static readonly string[] ConsumerQueues =
-    [
-        "customers.create-profile-on-customer-registered",
-        "inventory.open-item-on-product-created",
-    ];
-
-    private static ApiFactory Worker(string suffix) =>
-        new(
-            "Production",
-            configure: builder =>
-            {
-                builder.UseSetting("Outbox:Relay:Enabled", "true");
-                builder.UseSetting("Outbox:Relay:PollInterval", "00:00:00.200");
-                builder.UseSetting("RabbitMq:ConsumersEnabled", "true");
-                builder.UseSetting("RabbitMq:RetryBackoff", "00:00:00.050");
-                builder.UseSetting("RabbitMq:Exchange", $"test-customers-{suffix}");
-                builder.UseSetting("RabbitMq:DeadLetterExchange", $"test-customers-{suffix}.dead");
-                builder.UseSetting("ConnectionStrings:RabbitMQ", RabbitMqFixture.Current.ConnectionString);
-            }
-        );
-
-    private static async Task WaitUntilAsync(Func<Task<bool>> condition)
-    {
-        for (var attempt = 0; attempt < 200; attempt++)
-        {
-            if (await condition())
-            {
-                return;
-            }
-
-            await Task.Delay(100, Cancel);
-        }
-
-        throw new TimeoutException("The condition did not become true in time.");
-    }
-
     [Fact]
     [Trait("Rule", "BR-CUS-006")]
     public async Task Should_create_the_profile_of_a_registered_customer_through_the_outbox_and_the_broker()
     {
         var suffix = Guid.NewGuid().ToString("N")[..12];
-        using var factory = Worker(suffix);
+        await using var cleanUp = new BrokerCleanUp(suffix);
+        using var factory = WorkerRoleTests.Worker(suffix, RabbitMqFixture.Current.ConnectionString);
         using var client = factory.CreateClient(); // starts the host: the relays and the consumers begin
+        await WorkerRoleTests.WaitUntilConsumingAsync("customers.create-profile-on-customer-registered");
         var email = $"customer.{Guid.NewGuid():N}@example.com";
         var password = ApiFactory.RandomPassword();
 
@@ -76,7 +41,7 @@ public sealed class CustomerRegistrationFlowTests
         );
         created.StatusCode.ShouldBe(HttpStatusCode.Created);
 
-        await WaitUntilAsync(async () =>
+        await WorkerRoleTests.WaitUntilAsync(async () =>
             Equals(await factory.Database.ScalarAsync("SELECT count(*) FROM customers.customer_profiles"), 1L)
         );
 
@@ -97,8 +62,6 @@ public sealed class CustomerRegistrationFlowTests
             )
         ).ShouldBe(1L);
         (await factory.Database.ScalarAsync("SELECT count(*) FROM customers.inbox_messages")).ShouldBe(1L);
-
-        await CleanUpAsync(suffix);
     }
 
     [Fact]
@@ -106,8 +69,10 @@ public sealed class CustomerRegistrationFlowTests
     public async Task Should_create_no_profile_for_an_account_an_administrator_creates()
     {
         var suffix = Guid.NewGuid().ToString("N")[..12];
-        using var factory = Worker(suffix);
+        await using var cleanUp = new BrokerCleanUp(suffix);
+        using var factory = WorkerRoleTests.Worker(suffix, RabbitMqFixture.Current.ConnectionString);
         using var client = factory.CreateClient();
+        await WorkerRoleTests.WaitUntilConsumingAsync("customers.create-profile-on-customer-registered");
         var admin = await AuthClient.SignInAsync(client, factory.Accounts["administrator"]);
 
         using var created = await AuthClient.SendJsonAsync(
@@ -125,7 +90,7 @@ public sealed class CustomerRegistrationFlowTests
         created.StatusCode.ShouldBe(HttpStatusCode.Created);
 
         // The relay publishes the account events (they are processed), and none of them is addressed to Customers.
-        await WaitUntilAsync(async () =>
+        await WorkerRoleTests.WaitUntilAsync(async () =>
             Equals(
                 await factory.Database.ScalarAsync(
                     "SELECT count(*) FROM identity.outbox_messages WHERE processed_at IS NULL"
@@ -139,22 +104,5 @@ public sealed class CustomerRegistrationFlowTests
             )
         ).ShouldBe(0L);
         (await factory.Database.ScalarAsync("SELECT count(*) FROM customers.customer_profiles")).ShouldBe(0L);
-
-        await CleanUpAsync(suffix);
-    }
-
-    private static async Task CleanUpAsync(string suffix)
-    {
-        var factory = new ConnectionFactory { Uri = new Uri(RabbitMqFixture.Current.ConnectionString) };
-        await using var connection = await factory.CreateConnectionAsync(CancellationToken.None);
-        await using var channel = await connection.CreateChannelAsync(cancellationToken: CancellationToken.None);
-        foreach (var queue in ConsumerQueues)
-        {
-            await channel.QueueDeleteAsync(queue, cancellationToken: CancellationToken.None);
-            await channel.QueueDeleteAsync($"{queue}.dead", cancellationToken: CancellationToken.None);
-        }
-
-        await channel.ExchangeDeleteAsync($"test-customers-{suffix}", cancellationToken: CancellationToken.None);
-        await channel.ExchangeDeleteAsync($"test-customers-{suffix}.dead", cancellationToken: CancellationToken.None);
     }
 }
