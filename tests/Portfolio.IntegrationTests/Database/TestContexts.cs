@@ -2,11 +2,14 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Npgsql;
+using Portfolio.Cart.Infrastructure;
 using Portfolio.Catalog.Infrastructure;
 using Portfolio.Customers.Infrastructure;
 using Portfolio.Identity.Infrastructure;
 using Portfolio.Inventory.Infrastructure;
+using Portfolio.Ordering.Infrastructure;
 using Portfolio.SharedKernel.Infrastructure;
+using Portfolio.Shipping.Infrastructure;
 
 namespace Portfolio.IntegrationTests.Database;
 
@@ -39,6 +42,24 @@ internal static class TestContexts
         TimeProvider? clock = null,
         IEnumerable<IDomainEventSubscriber>? subscribers = null
     ) => new(Options<CustomersDbContext>(CustomersDbContext.SchemaName, dataSource, clock, subscribers));
+
+    public static CartDbContext Cart(
+        NpgsqlDataSource dataSource,
+        TimeProvider? clock = null,
+        IEnumerable<IDomainEventSubscriber>? subscribers = null
+    ) => new(Options<CartDbContext>(CartDbContext.SchemaName, dataSource, clock, subscribers));
+
+    public static OrderingDbContext Ordering(
+        NpgsqlDataSource dataSource,
+        TimeProvider? clock = null,
+        IEnumerable<IDomainEventSubscriber>? subscribers = null
+    ) => new(Options<OrderingDbContext>(OrderingDbContext.SchemaName, dataSource, clock, subscribers));
+
+    public static ShippingDbContext Shipping(
+        NpgsqlDataSource dataSource,
+        TimeProvider? clock = null,
+        IEnumerable<IDomainEventSubscriber>? subscribers = null
+    ) => new(Options<ShippingDbContext>(ShippingDbContext.SchemaName, dataSource, clock, subscribers));
 
     public static FakeTimeProvider NewClock() => new(new DateTimeOffset(2026, 10, 1, 12, 0, 0, TimeSpan.Zero));
 
