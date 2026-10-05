@@ -55,7 +55,7 @@ DECLARE
     schema_name text;
 BEGIN
     -- One schema per bounded context that has persistence, named after it (ai/DATABASE.md §5).
-    FOREACH schema_name IN ARRAY ARRAY['identity', 'catalog', 'inventory', 'customers']
+    FOREACH schema_name IN ARRAY ARRAY['identity', 'catalog', 'inventory', 'customers', 'cart', 'ordering', 'shipping']
     LOOP
         EXECUTE format('CREATE SCHEMA IF NOT EXISTS %I AUTHORIZATION app_migrator', schema_name);
         EXECUTE format('ALTER SCHEMA %I OWNER TO app_migrator', schema_name);
@@ -71,6 +71,11 @@ BEGIN
         -- ...and the ones that already exist (a re-run after a migration, or an adopted database).
         EXECUTE format('GRANT SELECT, INSERT, UPDATE ON ALL TABLES IN SCHEMA %I TO app_runtime', schema_name);
         EXECUTE format('GRANT SELECT ON ALL TABLES IN SCHEMA %I TO app_readonly', schema_name);
+
+        -- Sequences (the order number): the runtime role may draw the next value, nothing else; the reporting role
+        -- sees none. Without USAGE, nextval() is denied.
+        EXECUTE format('ALTER DEFAULT PRIVILEGES FOR ROLE app_migrator IN SCHEMA %I GRANT USAGE, SELECT ON SEQUENCES TO app_runtime', schema_name);
+        EXECUTE format('GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA %I TO app_runtime', schema_name);
 
         -- The migration history is the migrator's business alone.
         IF to_regclass(format('%I.__ef_migrations_history', schema_name)) IS NOT NULL THEN
