@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Mvc.Controllers;
 using Microsoft.AspNetCore.Server.Kestrel.Core;
 using Microsoft.Extensions.Configuration.Json;
 using Microsoft.Extensions.FileProviders;
+using Portfolio.Cart;
 using Portfolio.Catalog;
 using Portfolio.Catalog.Infrastructure;
 using Portfolio.Customers;
@@ -13,9 +14,13 @@ using Portfolio.Identity;
 using Portfolio.Identity.Infrastructure;
 using Portfolio.Inventory;
 using Portfolio.Inventory.Infrastructure;
+using Portfolio.Ordering;
+using Portfolio.Ordering.Infrastructure;
 using Portfolio.SharedKernel.API;
 using Portfolio.SharedKernel.API.Health;
 using Portfolio.SharedKernel.Infrastructure;
+using Portfolio.Shipping;
+using Portfolio.Shipping.Infrastructure;
 using Scalar.AspNetCore;
 
 // Compose healthcheck mode: the chiseled image has no shell or curl, so the app probes its own readiness
@@ -55,10 +60,14 @@ builder.Services.AddApiHealthChecks();
 builder.Services.AddObservability(builder.Logging, builder.Configuration, builder.Environment);
 builder.Services.AddPostgres(builder.Configuration, builder.Environment);
 builder.Services.AddValkey(builder.Configuration);
+builder.Services.AddPageCursors(builder.Configuration, builder.Environment);
 builder.Services.AddIdentityModule(builder.Configuration, builder.Environment);
 builder.Services.AddCatalogModule(builder.Environment);
+builder.Services.AddCartModule(builder.Environment);
 builder.Services.AddCustomersModule(builder.Environment);
 builder.Services.AddInventoryModule(builder.Environment);
+builder.Services.AddOrderingModule(builder.Environment);
+builder.Services.AddShippingModule(builder.Environment);
 AddMessaging(builder);
 builder
     .Services.AddControllers(options =>
@@ -146,6 +155,8 @@ static void AddMessaging(WebApplicationBuilder builder)
         builder.Services.AddOutboxRelay<CustomersDbContext, RabbitMqOutboxPublisher>(builder.Configuration);
         builder.Services.AddOutboxRelay<IdentityDbContext, RabbitMqOutboxPublisher>(builder.Configuration);
         builder.Services.AddOutboxRelay<InventoryDbContext, RabbitMqOutboxPublisher>(builder.Configuration);
+        builder.Services.AddOutboxRelay<OrderingDbContext, RabbitMqOutboxPublisher>(builder.Configuration);
+        builder.Services.AddOutboxRelay<ShippingDbContext, RabbitMqOutboxPublisher>(builder.Configuration);
     }
 
     if (consumers)
