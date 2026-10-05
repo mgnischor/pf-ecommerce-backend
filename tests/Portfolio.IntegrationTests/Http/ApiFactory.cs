@@ -134,6 +134,7 @@ internal sealed class ApiFactory : WebApplicationFactory<Program>
         settings["Jwt:Keys:0:Id"] = KeyId;
         settings["Jwt:Keys:0:PrivateKeyPem"] = _signingKey.ExportPkcs8PrivateKeyPem();
         settings["Identity:TokenHashKey"] = Convert.ToBase64String(RandomNumberGenerator.GetBytes(64));
+        settings["Pagination:CursorKey"] = Convert.ToBase64String(RandomNumberGenerator.GetBytes(64));
 
         var index = 0;
         foreach (var account in Accounts.Values)
