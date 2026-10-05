@@ -130,6 +130,8 @@ services:
               target: jwt_es384_private_key
             - source: identity_token_hash_key
               target: Identity__TokenHashKey
+            - source: pagination_cursor_key
+              target: Pagination__CursorKey
             - source: bootstrap_admin_email
               target: Identity__Bootstrap__Accounts__0__Email
             - source: bootstrap_admin_password
@@ -207,6 +209,8 @@ services:
               target: jwt_es384_private_key
             - source: identity_token_hash_key
               target: Identity__TokenHashKey
+            - source: pagination_cursor_key
+              target: Pagination__CursorKey
             - source: conn_postgres
               target: ConnectionStrings__Postgres
             - source: conn_valkey
@@ -277,12 +281,33 @@ services:
             db-migrate-inventory:
                 condition: service_completed_successfully
 
+    db-migrate-cart:
+        <<: *db-migrate
+        entrypoint: ["/migrations/migrate-cart"]
+        depends_on:
+            db-migrate-customers:
+                condition: service_completed_successfully
+
+    db-migrate-ordering:
+        <<: *db-migrate
+        entrypoint: ["/migrations/migrate-ordering"]
+        depends_on:
+            db-migrate-cart:
+                condition: service_completed_successfully
+
+    db-migrate-shipping:
+        <<: *db-migrate
+        entrypoint: ["/migrations/migrate-shipping"]
+        depends_on:
+            db-migrate-ordering:
+                condition: service_completed_successfully
+
     # Runs the provisioning again: the grants now cover the tables the migrations created, and the runtime role
     # is denied the migration history.
     db-grant:
         <<: *db-provision
         depends_on:
-            db-migrate-customers:
+            db-migrate-shipping:
                 condition: service_completed_successfully
 
     postgres:
@@ -576,6 +601,8 @@ secrets:
         file: ./secrets/jwt_es384_private_key.pem
     identity_token_hash_key:
         file: ./secrets/identity_token_hash_key.txt
+    pagination_cursor_key:
+        file: ./secrets/pagination_cursor_key.txt
     bootstrap_admin_email:
         file: ./secrets/bootstrap_admin_email.txt
     bootstrap_admin_password:
