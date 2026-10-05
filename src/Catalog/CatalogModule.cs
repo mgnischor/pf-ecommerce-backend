@@ -21,9 +21,13 @@ internal static class CatalogModule
         services.AddSingleton<IDomainEventSubscriber, CatalogMetricsSubscriber>();
 
         services.AddUseCase<CatalogDbContext, CreateProductHandler>();
+        services.AddUseCase<CatalogDbContext, UpdateProductHandler>();
         services.AddUseCase<CatalogDbContext, ChangeProductPriceHandler>();
         services.AddUseCase<CatalogDbContext, ActivateProductHandler>();
         services.AddUseCase<CatalogDbContext, DiscontinueProductHandler>();
+        services.AddUseCase<CatalogDbContext, DeleteProductHandler>();
+        services.AddScoped<GetProductHandler>();
+        services.AddScoped<ListProductsHandler>();
 
         return services;
     }
