@@ -81,6 +81,7 @@ internal static class ErrorProblemDetails
                 "precondition-failed",
                 "The resource changed since it was read."
             ),
+            ErrorType.BadRequest => (StatusCodes.Status400BadRequest, "malformed-request", "The request is malformed."),
             _ => (StatusCodes.Status500InternalServerError, "internal-error", "An unexpected error occurred."),
         };
 }
