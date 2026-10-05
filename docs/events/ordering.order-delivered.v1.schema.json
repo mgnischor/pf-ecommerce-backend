@@ -1,0 +1,39 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "urn:ecommerce:events:ordering.order-delivered:v1",
+    "title": "ordering.order-delivered v1",
+    "description": "An order was delivered to the customer. Terminal. Consumers must ignore properties they do not know: adding one is a backward-compatible change.",
+    "type": "object",
+    "required": ["eventId", "aggregateId", "aggregateVersion", "occurredAt", "customerId", "number"],
+    "properties": {
+        "eventId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Unique per occurrence; the message-id consumers deduplicate on."
+        },
+        "aggregateId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "The order."
+        },
+        "aggregateVersion": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Version of the aggregate after the change; detects gaps and reordering."
+        },
+        "occurredAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "UTC."
+        },
+        "customerId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "The account that owns the order."
+        },
+        "number": {
+            "type": "string",
+            "pattern": "^PF-[0-9]{4}-[0-9]{6,}$"
+        }
+    }
+}
