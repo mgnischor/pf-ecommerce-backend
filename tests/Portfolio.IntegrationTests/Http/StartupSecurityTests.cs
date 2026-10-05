@@ -1,3 +1,5 @@
+using Microsoft.Extensions.Configuration;
+
 namespace Portfolio.IntegrationTests.Http;
 
 /// <summary>Key handling at startup: fail closed outside Development, ephemeral keys only inside it (ai/SECURITY.md §5, §7.6).</summary>
@@ -41,6 +43,30 @@ public sealed class StartupSecurityTests
         using var factory = new ApiFactory("Production", builder => builder.UseSetting(key, value));
 
         Should.Throw<Exception>(() => factory.CreateClient());
+    }
+
+    // The factory supplies a valid cursor key itself, so these settings are applied after it and win over it.
+    [Theory]
+    [InlineData("")]
+    [InlineData("c2hvcnQ=")]
+    [InlineData("not base64 !!!")]
+    public void Should_refuse_to_start_without_a_usable_pagination_cursor_key(string cursorKey)
+    {
+        using var factory = new ApiFactory(
+            "Production",
+            builder =>
+                builder.ConfigureAppConfiguration(
+                    (_, configuration) =>
+                        configuration.AddInMemoryCollection(
+                            new Dictionary<string, string?>(StringComparer.Ordinal)
+                            {
+                                ["Pagination:CursorKey"] = cursorKey,
+                            }
+                        )
+                )
+        );
+
+        Should.Throw<Exception>(() => factory.CreateClient()).ToString().ShouldContain("Pagination:CursorKey");
     }
 
     [Fact]
