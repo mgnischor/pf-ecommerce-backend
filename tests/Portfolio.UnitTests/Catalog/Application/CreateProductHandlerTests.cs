@@ -21,16 +21,123 @@ public sealed class CreateProductHandlerTests
         new("Cafeteira Elétrica", sku, 189.90m, "BRL", "Com filtro permanente.");
 
     [Fact]
-    public async Task Should_persist_a_draft_product_and_return_its_identifier_when_the_request_is_valid()
+    public async Task Should_persist_a_draft_product_and_return_it_when_the_request_is_valid()
     {
         var result = await _handler.HandleAsync(ValidCommand(), TestContext.Current.CancellationToken);
 
         var product = _products.Products.ShouldHaveSingleItem();
-        result.Value.ShouldBe(product.Id);
+        result.Value.Id.ShouldBe(product.Id);
+        result.Value.Version.ShouldBe(AggregateRoot.InitialVersion);
+        result.Value.Status.ShouldBe(ProductStatusView.Draft);
+        result.Value.AllowedActions.ShouldContain(ProductActions.Activate);
         product.Status.ShouldBe(ProductStatus.Draft);
         product.Sku.Value.ShouldBe("CAF-600-PRT");
         product.Price.ShouldBe(new Money(189.90m, "BRL"));
         _unitOfWork.SaveCalls.ShouldBe(1);
+    }
+
+    [Fact]
+    [Trait("Rule", "BR-CAT-008")]
+    public async Task Should_keep_the_idempotency_key_on_the_product()
+    {
+        await _handler.HandleAsync(
+            ValidCommand() with
+            {
+                IdempotencyKey = "key-0001",
+            },
+            TestContext.Current.CancellationToken
+        );
+
+        _products.Products.ShouldHaveSingleItem().CreationKey.ShouldBe("key-0001");
+    }
+
+    [Fact]
+    [Trait("Rule", "BR-CAT-008")]
+    public async Task Should_answer_a_retry_with_the_original_product_and_create_nothing_more()
+    {
+        var command = ValidCommand() with { IdempotencyKey = "key-0001" };
+        var first = await _handler.HandleAsync(command, TestContext.Current.CancellationToken);
+
+        var retry = await _handler.HandleAsync(command, TestContext.Current.CancellationToken);
+
+        retry.IsSuccess.ShouldBeTrue();
+        retry.Value.Id.ShouldBe(first.Value.Id);
+        _products.Products.Count.ShouldBe(1);
+        _unitOfWork.SaveCalls.ShouldBe(1);
+    }
+
+    [Fact]
+    [Trait("Rule", "BR-CAT-008")]
+    public async Task Should_recognise_a_retry_whose_sku_and_text_differ_only_by_case_and_padding()
+    {
+        var first = await _handler.HandleAsync(
+            ValidCommand("caf-600-prt") with
+            {
+                IdempotencyKey = "key-0001",
+                Name = "  Cafeteira Elétrica ",
+            },
+            TestContext.Current.CancellationToken
+        );
+
+        var retry = await _handler.HandleAsync(
+            ValidCommand() with
+            {
+                IdempotencyKey = "key-0001",
+            },
+            TestContext.Current.CancellationToken
+        );
+
+        retry.Value.Id.ShouldBe(first.Value.Id);
+    }
+
+    [Theory]
+    [InlineData("OTHER-SKU", 189.90, "Cafeteira Elétrica")]
+    [InlineData("CAF-600-PRT", 199.90, "Cafeteira Elétrica")]
+    [InlineData("CAF-600-PRT", 189.90, "Outra cafeteira")]
+    [Trait("Rule", "BR-CAT-008")]
+    public async Task Should_reject_the_same_key_with_a_different_request_and_create_nothing(
+        string sku,
+        double price,
+        string name
+    )
+    {
+        await _handler.HandleAsync(
+            ValidCommand() with
+            {
+                IdempotencyKey = "key-0001",
+            },
+            TestContext.Current.CancellationToken
+        );
+
+        var reuse = await _handler.HandleAsync(
+            ValidCommand(sku) with
+            {
+                IdempotencyKey = "key-0001",
+                Price = (decimal)price,
+                Name = name,
+            },
+            TestContext.Current.CancellationToken
+        );
+
+        reuse.ShouldFail().Code.ShouldBe("IDEMPOTENCY_KEY_REUSED");
+        reuse.ShouldFail().Type.ShouldBe(ErrorType.Validation);
+        reuse.ShouldFail().RuleId.ShouldBe("BR-CAT-008");
+        _products.Products.Count.ShouldBe(1);
+        _unitOfWork.SaveCalls.ShouldBe(1);
+    }
+
+    [Fact]
+    [Trait("Rule", "BR-CAT-008")]
+    public async Task Should_not_replay_a_creation_whose_product_was_deleted_since()
+    {
+        var command = ValidCommand() with { IdempotencyKey = "key-0001" };
+        var first = await _handler.HandleAsync(command, TestContext.Current.CancellationToken);
+        _products.Products.Single(product => product.Id == first.Value.Id).Delete("key-0002", _clock);
+
+        var retry = await _handler.HandleAsync(command, TestContext.Current.CancellationToken);
+
+        retry.ShouldFail().Code.ShouldBe("IDEMPOTENCY_KEY_REUSED");
+        _products.Products.Count.ShouldBe(1);
     }
 
     [Fact]
