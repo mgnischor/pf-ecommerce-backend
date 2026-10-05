@@ -1,0 +1,88 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "urn:ecommerce:events:ordering.order-placed:v1",
+    "title": "ordering.order-placed v1",
+    "description": "An order was placed from a checkout. Carries the full snapshot (customer, number, total, lines) so consumers never need to query back. Consumers must ignore properties they do not know: adding one is a backward-compatible change.",
+    "type": "object",
+    "required": ["eventId", "aggregateId", "aggregateVersion", "occurredAt", "customerId", "number", "total", "items"],
+    "properties": {
+        "eventId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Unique per occurrence; the message-id consumers deduplicate on."
+        },
+        "aggregateId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "The order."
+        },
+        "aggregateVersion": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Version of the aggregate after the change; detects gaps and reordering."
+        },
+        "occurredAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "UTC."
+        },
+        "customerId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "The account that owns the order."
+        },
+        "number": {
+            "type": "string",
+            "pattern": "^PF-[0-9]{4}-[0-9]{6,}$",
+            "description": "Human-readable order number, unique."
+        },
+        "total": {
+            "$ref": "#/$defs/money"
+        },
+        "items": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 50,
+            "items": {
+                "type": "object",
+                "required": ["productId", "sku", "quantity", "unitPrice"],
+                "properties": {
+                    "productId": {
+                        "type": "string",
+                        "format": "uuid"
+                    },
+                    "sku": {
+                        "type": "string",
+                        "maxLength": 32
+                    },
+                    "quantity": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 99
+                    },
+                    "unitPrice": {
+                        "$ref": "#/$defs/money"
+                    }
+                }
+            }
+        }
+    },
+    "$defs": {
+        "money": {
+            "type": "object",
+            "required": ["amount", "currency"],
+            "properties": {
+                "amount": {
+                    "type": "string",
+                    "pattern": "^-?[0-9]+\\.[0-9]{2,4}$",
+                    "description": "Decimal string; never a JSON number."
+                },
+                "currency": {
+                    "type": "string",
+                    "pattern": "^[A-Z]{3}$",
+                    "description": "ISO 4217."
+                }
+            }
+        }
+    }
+}
