@@ -35,6 +35,14 @@ internal sealed class ProductConfiguration : IEntityTypeConfiguration<Product>
             .HasConversion(sku => sku.Value, value => Sku.Create(value).Value)
             .IsRequired();
         builder.Property(product => product.Status).HasConversion<string>().HasMaxLength(20).IsRequired();
+        builder
+            .Property(product => product.CreationKey)
+            .HasColumnName("creation_key")
+            .HasMaxLength(Product.MaxIdempotencyKeyLength);
+        builder
+            .Property(product => product.DeletionKey)
+            .HasColumnName("deletion_key")
+            .HasMaxLength(Product.MaxIdempotencyKeyLength);
 
         // Money is a value object stored as two columns: amount numeric(19,4) and ISO 4217 currency char(3).
         builder.ComplexProperty(
@@ -50,12 +58,25 @@ internal sealed class ProductConfiguration : IEntityTypeConfiguration<Product>
             }
         );
 
+        ConfigureIndexes(builder);
+    }
+
+    private static void ConfigureIndexes(EntityTypeBuilder<Product> builder)
+    {
         // BR-CAT-005: one active product per SKU; a logically deleted product releases its SKU.
         builder
             .HasIndex(product => product.Sku)
             .IsUnique()
             .HasFilter("deleted_at IS NULL")
             .HasDatabaseName("ux_products_sku_active");
+
+        // BR-CAT-008: a creation key identifies one creation request, even after the product is deleted, so the
+        // index is not filtered by deleted_at. Products created without a key do not take part.
+        builder
+            .HasIndex(product => product.CreationKey)
+            .IsUnique()
+            .HasFilter("creation_key IS NOT NULL")
+            .HasDatabaseName("ux_products_creation_key");
 
         // Catalog listing by status, newest first.
         builder
