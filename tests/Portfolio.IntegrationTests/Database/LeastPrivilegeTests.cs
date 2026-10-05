@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Npgsql;
 using Portfolio.IntegrationTests.Http;
 using Portfolio.Inventory.Domain;
+using Portfolio.Ordering.Infrastructure;
 
 namespace Portfolio.IntegrationTests.Database;
 
@@ -100,6 +101,21 @@ public sealed class LeastPrivilegeTests : IDisposable
             await customers.Database.MigrateAsync(TestContext.Current.CancellationToken);
         }
 
+        await using (var cart = TestContexts.Cart(migrator))
+        {
+            await cart.Database.MigrateAsync(TestContext.Current.CancellationToken);
+        }
+
+        await using (var ordering = TestContexts.Ordering(migrator))
+        {
+            await ordering.Database.MigrateAsync(TestContext.Current.CancellationToken);
+        }
+
+        await using (var shipping = TestContexts.Shipping(migrator))
+        {
+            await shipping.Database.MigrateAsync(TestContext.Current.CancellationToken);
+        }
+
         await ProvisionAsync();
     }
 
@@ -119,10 +135,10 @@ public sealed class LeastPrivilegeTests : IDisposable
         await DeployAsync();
 
         var owners = await _database.StringsAsync(
-            "SELECT DISTINCT tableowner FROM pg_tables WHERE schemaname IN ('identity', 'catalog', 'inventory', 'customers')"
+            "SELECT DISTINCT tableowner FROM pg_tables WHERE schemaname IN ('identity', 'catalog', 'inventory', 'customers', 'cart', 'ordering', 'shipping')"
         );
         var schemaOwners = await _database.StringsAsync(
-            "SELECT DISTINCT pg_get_userbyid(nspowner) FROM pg_namespace WHERE nspname IN ('identity', 'catalog', 'inventory', 'customers')"
+            "SELECT DISTINCT pg_get_userbyid(nspowner) FROM pg_namespace WHERE nspname IN ('identity', 'catalog', 'inventory', 'customers', 'cart', 'ordering', 'shipping')"
         );
 
         owners.ShouldBe(["app_migrator"]);
@@ -172,6 +188,43 @@ public sealed class LeastPrivilegeTests : IDisposable
         var refusal = await RefusedAsync("app_runtime", RuntimePassword, sql);
 
         refusal.SqlState.ShouldBe(InsufficientPrivilege);
+    }
+
+    [Fact]
+    public async Task Should_let_the_runtime_role_draw_order_numbers_from_the_sequence_and_nothing_more()
+    {
+        await DeployAsync();
+        await using var runtime = new NpgsqlDataSourceBuilder(ConnectionFor("app_runtime", RuntimePassword)).Build();
+        await using var ordering = TestContexts.Ordering(runtime);
+        var repository = new EfOrderRepository(ordering);
+        var placedAt = new DateTimeOffset(2026, 10, 5, 12, 0, 0, TimeSpan.Zero);
+
+        var first = await repository.NextNumberAsync(placedAt, TestContext.Current.CancellationToken);
+        var second = await repository.NextNumberAsync(placedAt, TestContext.Current.CancellationToken);
+        var restart = await RefusedAsync(
+            "app_runtime",
+            RuntimePassword,
+            "ALTER SEQUENCE ordering.order_number_seq RESTART"
+        );
+        var set = await RefusedAsync("app_runtime", RuntimePassword, "SELECT setval('ordering.order_number_seq', 1)");
+
+        (first, second).ShouldBe(("PF-2026-000001", "PF-2026-000002"));
+        restart.SqlState.ShouldBe(InsufficientPrivilege);
+        set.SqlState.ShouldBe(InsufficientPrivilege);
+    }
+
+    [Fact]
+    public async Task Should_not_let_the_reporting_role_draw_order_numbers()
+    {
+        await DeployAsync();
+
+        var refusal = await RefusedAsync(
+            "app_readonly",
+            ReadonlyPassword,
+            "SELECT nextval('ordering.order_number_seq')"
+        );
+
+        refusal.SqlState.ShouldBeOneOf(InsufficientPrivilege, ReadOnlyTransaction);
     }
 
     [Fact]
