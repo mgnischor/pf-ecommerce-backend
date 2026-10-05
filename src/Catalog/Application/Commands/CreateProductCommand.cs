@@ -6,10 +6,12 @@ namespace Portfolio.Catalog.Application;
 /// <param name="Price">Sell price amount.</param>
 /// <param name="Currency">ISO 4217 currency code of the price.</param>
 /// <param name="Description">Optional description.</param>
+/// <param name="IdempotencyKey">Client key: replaying it returns the original product and never creates a second one (BR-CAT-008).</param>
 internal sealed record CreateProductCommand(
     string? Name,
     string? Sku,
     decimal Price,
     string? Currency,
-    string? Description = null
+    string? Description = null,
+    string? IdempotencyKey = null
 );
