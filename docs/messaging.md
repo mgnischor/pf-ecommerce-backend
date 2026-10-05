@@ -49,9 +49,13 @@ types.
 
 ### Registered consumers
 
-| Consumer (queue)                         | Binds to                  | Effect                                                                              |
-| ---------------------------------------- | ------------------------- | ----------------------------------------------------------------------------------- |
-| `inventory.open-item-on-product-created` | `catalog.product-created` | Opens the inventory item of the new SKU (BR-INV-008); leaves an existing item alone |
+| Consumer (queue)                                | Binds to                       | Effect                                                                                                                                                                               |
+| ----------------------------------------------- | ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `inventory.open-item-on-product-created`        | `catalog.product-created`      | Opens the inventory item of the new SKU (BR-INV-008); leaves an existing item alone                                                                                                  |
+| `cart.sync-catalog-products`                    | `catalog.*`                    | Keeps the Cart's own view of the catalog current (BR-CRT-005); ignores events it does not use                                                                                        |
+| `shipping.sync-orders`                          | `ordering.*`                   | Records whose each order is (BR-SHP-004), starts the shipment when the order is paid (BR-SHP-001) and cancels it while it is being prepared (BR-SHP-005); ignores other order events |
+| `ordering.mark-shipped-on-shipment-dispatched`  | `shipping.shipment-dispatched` | Moves the order to shipped (BR-ORD-003)                                                                                                                                              |
+| `ordering.mark-delivered-on-shipment-delivered` | `shipping.shipment-delivered`  | Moves the order to delivered (BR-ORD-003)                                                                                                                                            |
 
 ## Roles and configuration
 
