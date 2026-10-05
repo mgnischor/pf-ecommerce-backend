@@ -113,6 +113,6 @@ public sealed class OtlpExportTests
 
         using var response = await client.GetAsync(new Uri("/api/v1/products", UriKind.Relative), Cancel);
 
-        response.StatusCode.ShouldBe(HttpStatusCode.NotImplemented);
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
     }
 }
