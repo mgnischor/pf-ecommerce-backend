@@ -44,6 +44,17 @@ public sealed class ErrorFactoryTests
         error.Field.ShouldBeNull();
         error.RuleId.ShouldBeNull();
     }
+
+    [Fact]
+    public void Should_create_a_bad_request_error_with_the_malformed_field_and_no_rule()
+    {
+        var error = Error.BadRequest("PAGE_CURSOR_INVALID", "cursor");
+
+        error.Type.ShouldBe(ErrorType.BadRequest);
+        error.Code.ShouldBe("PAGE_CURSOR_INVALID");
+        error.Field.ShouldBe("cursor");
+        error.RuleId.ShouldBeNull();
+    }
 }
 
 public sealed class ErrorEqualityTests
