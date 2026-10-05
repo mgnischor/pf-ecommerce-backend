@@ -31,6 +31,38 @@ spec:
               value: "100"
           authenticationRef:
               name: ecommerce-keda-rabbitmq
+        - type: rabbitmq
+          metadata:
+              protocol: amqp
+              queueName: cart.sync-catalog-products
+              mode: QueueLength
+              value: "100"
+          authenticationRef:
+              name: ecommerce-keda-rabbitmq
+        - type: rabbitmq
+          metadata:
+              protocol: amqp
+              queueName: ordering.mark-shipped-on-shipment-dispatched
+              mode: QueueLength
+              value: "100"
+          authenticationRef:
+              name: ecommerce-keda-rabbitmq
+        - type: rabbitmq
+          metadata:
+              protocol: amqp
+              queueName: ordering.mark-delivered-on-shipment-delivered
+              mode: QueueLength
+              value: "100"
+          authenticationRef:
+              name: ecommerce-keda-rabbitmq
+        - type: rabbitmq
+          metadata:
+              protocol: amqp
+              queueName: shipping.sync-orders
+              mode: QueueLength
+              value: "100"
+          authenticationRef:
+              name: ecommerce-keda-rabbitmq
 ---
 apiVersion: keda.sh/v1alpha1
 kind: TriggerAuthentication
