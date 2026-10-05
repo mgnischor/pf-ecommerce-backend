@@ -17,7 +17,7 @@ public sealed class WorkerRoleTests
 {
     private static CancellationToken Cancel => TestContext.Current.CancellationToken;
 
-    private static ApiFactory Worker(string suffix, string brokerConnectionString) =>
+    internal static ApiFactory Worker(string suffix, string brokerConnectionString) =>
         new(
             "Production",
             configure: builder =>
@@ -34,7 +34,7 @@ public sealed class WorkerRoleTests
             }
         );
 
-    private static async Task WaitUntilAsync(Func<Task<bool>> condition)
+    internal static async Task WaitUntilAsync(Func<Task<bool>> condition)
     {
         for (var attempt = 0; attempt < 200; attempt++)
         {
@@ -49,12 +49,39 @@ public sealed class WorkerRoleTests
         throw new TimeoutException("The condition did not become true in time.");
     }
 
+    /// <summary>
+    /// Waits until every queue has its consumer. Events are published to an exchange, and a message published before a
+    /// queue is bound to it reaches nobody (publish/subscribe), so a test that publishes right after the host starts
+    /// would race the subscription of the consumers.
+    /// </summary>
+    internal static async Task WaitUntilConsumingAsync(params string[] queues)
+    {
+        var factory = new ConnectionFactory { Uri = new Uri(RabbitMqFixture.Current.ConnectionString) };
+        await using var connection = await factory.CreateConnectionAsync(Cancel);
+        foreach (var queue in queues)
+        {
+            await WaitUntilAsync(async () =>
+            {
+                try
+                {
+                    await using var channel = await connection.CreateChannelAsync(cancellationToken: Cancel);
+                    return (await channel.QueueDeclarePassiveAsync(queue, Cancel)).ConsumerCount > 0;
+                }
+                catch (RabbitMQ.Client.Exceptions.OperationInterruptedException)
+                {
+                    return false; // the queue is not declared yet
+                }
+            });
+        }
+    }
+
     [Fact]
     public async Task Should_open_the_inventory_item_of_a_product_created_in_the_catalog()
     {
         var suffix = Guid.NewGuid().ToString("N")[..12];
         using var factory = Worker(suffix, RabbitMqFixture.Current.ConnectionString);
         using var client = factory.CreateClient(); // starts the host: the relays and the consumers begin
+        await WaitUntilConsumingAsync("inventory.open-item-on-product-created");
 
         using (var scope = factory.Services.CreateScope())
         {
@@ -134,7 +161,7 @@ public sealed class WorkerRoleTests
         ready.StatusCode.ShouldBe(HttpStatusCode.OK);
     }
 
-    private static async Task CleanUpAsync(string suffix)
+    internal static async Task CleanUpAsync(string suffix)
     {
         var factory = new ConnectionFactory { Uri = new Uri(RabbitMqFixture.Current.ConnectionString) };
         await using var connection = await factory.CreateConnectionAsync(CancellationToken.None);
@@ -155,6 +182,21 @@ public sealed class WorkerRoleTests
             "customers.create-profile-on-customer-registered.dead",
             cancellationToken: CancellationToken.None
         );
+        foreach (
+            var queue in new[]
+            {
+                "ordering.mark-shipped-on-shipment-dispatched",
+                "ordering.mark-delivered-on-shipment-delivered",
+                "shipping.sync-orders",
+            }
+        )
+        {
+            await channel.QueueDeleteAsync(queue, cancellationToken: CancellationToken.None);
+            await channel.QueueDeleteAsync($"{queue}.dead", cancellationToken: CancellationToken.None);
+        }
+
+        await channel.QueueDeleteAsync("cart.sync-catalog-products", cancellationToken: CancellationToken.None);
+        await channel.QueueDeleteAsync("cart.sync-catalog-products.dead", cancellationToken: CancellationToken.None);
         await channel.ExchangeDeleteAsync($"test-worker-{suffix}", cancellationToken: CancellationToken.None);
         await channel.ExchangeDeleteAsync($"test-worker-{suffix}.dead", cancellationToken: CancellationToken.None);
     }
