@@ -63,12 +63,12 @@ public sealed partial class PersistenceConventionTests
         context.Model.GetEntityTypes().Where(type => typeof(Entity).IsAssignableFrom(type.ClrType));
 
     [Fact]
-    public void Guards_the_rules_themselves_by_finding_the_four_contexts_that_have_persistence()
+    public void Guards_the_rules_themselves_by_finding_every_context_that_has_persistence()
     {
         DbContextTypes()
             .Select(ContextOf)
             .Order(StringComparer.Ordinal)
-            .ShouldBe(["Catalog", "Customers", "Identity", "Inventory"]);
+            .ShouldBe(["Cart", "Catalog", "Customers", "Identity", "Inventory", "Ordering", "Shipping"]);
     }
 
     [Theory]
