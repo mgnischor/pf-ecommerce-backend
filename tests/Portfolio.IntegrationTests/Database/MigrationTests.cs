@@ -18,6 +18,9 @@ public sealed class MigrationTests : DatabaseTestBase
     [InlineData("catalog", "products")]
     [InlineData("inventory", "inventory_items,stock_movements")]
     [InlineData("customers", "customer_profiles")]
+    [InlineData("cart", "carts,cart_items,catalog_products")]
+    [InlineData("ordering", "orders,order_items")]
+    [InlineData("shipping", "shipments,order_references")]
     public async Task Should_create_in_each_schema_its_own_tables_and_its_own_outbox_inbox_and_history(
         string schema,
         string domainTables
@@ -40,26 +43,42 @@ public sealed class MigrationTests : DatabaseTestBase
             """
         );
 
-        schemas.ShouldBe(["catalog", "customers", "identity", "inventory"]);
+        schemas.ShouldBe(["cart", "catalog", "customers", "identity", "inventory", "ordering", "shipping"]);
     }
 
     [Fact]
     public async Task Should_keep_the_applied_migrations_in_each_contexts_own_history_table_in_order()
     {
-        foreach (var schema in new[] { "identity", "catalog", "inventory", "customers" })
+        foreach (
+            var schema in new[] { "identity", "catalog", "inventory", "customers", "cart", "ordering", "shipping" }
+        )
         {
             var applied = await Database.StringsAsync(
                 $"SELECT migration_id FROM {schema}.__ef_migrations_history ORDER BY migration_id"
             );
 
             // The three older contexts added the trace columns in a second migration; Customers was born with them.
-            var expected = string.Equals(schema, "customers", StringComparison.Ordinal) ? 1 : 2;
+            // Catalog then added the idempotency keys of its creation and deletion (BR-CAT-008) in a third.
+            var expected = schema switch
+            {
+                "customers" => 1,
+                "cart" => 1,
+                "ordering" => 1,
+                "shipping" => 1,
+                "catalog" => 3,
+                _ => 2,
+            };
 
             applied.Count.ShouldBe(expected);
             applied[0].ShouldEndWith($"_Create{char.ToUpperInvariant(schema[0])}{schema[1..]}Schema");
-            if (expected == 2)
+            if (expected >= 2)
             {
                 applied[1].ShouldEndWith("_AddOutboxTraceContext");
+            }
+
+            if (expected == 3)
+            {
+                applied[2].ShouldEndWith("_AddProductIdempotencyKeys");
             }
         }
     }
@@ -67,7 +86,9 @@ public sealed class MigrationTests : DatabaseTestBase
     [Fact]
     public async Task Should_add_the_trace_context_columns_to_every_outbox_as_nullable_so_the_old_version_keeps_working()
     {
-        foreach (var schema in new[] { "identity", "catalog", "inventory", "customers" })
+        foreach (
+            var schema in new[] { "identity", "catalog", "inventory", "customers", "cart", "ordering", "shipping" }
+        )
         {
             var columns = await Database.StringsAsync(
                 $"""
@@ -104,6 +125,13 @@ public sealed class MigrationTests : DatabaseTestBase
     [InlineData("catalog", "products", true)]
     [InlineData("inventory", "inventory_items", true)]
     [InlineData("customers", "customer_profiles", true)]
+    [InlineData("cart", "carts", true)]
+    [InlineData("cart", "cart_items", false)]
+    [InlineData("cart", "catalog_products", true)]
+    [InlineData("ordering", "orders", true)]
+    [InlineData("ordering", "order_items", false)]
+    [InlineData("shipping", "shipments", true)]
+    [InlineData("shipping", "order_references", false)]
     [InlineData("inventory", "stock_movements", false)]
     public async Task Should_give_every_domain_table_the_traceability_columns_and_aggregate_roots_a_version(
         string schema,
