@@ -34,9 +34,19 @@ namespace Portfolio.Catalog.Infrastructure.Persistence.Migrations
                         .HasColumnType("timestamptz")
                         .HasColumnName("created_at");
 
+                    b.Property<string>("CreationKey")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("creation_key");
+
                     b.Property<DateTimeOffset?>("DeletedAt")
                         .HasColumnType("timestamptz")
                         .HasColumnName("deleted_at");
+
+                    b.Property<string>("DeletionKey")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("deletion_key");
 
                     b.Property<string>("Description")
                         .HasMaxLength(2000)
@@ -87,6 +97,11 @@ namespace Portfolio.Catalog.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id")
                         .HasName("pk_products");
+
+                    b.HasIndex("CreationKey")
+                        .IsUnique()
+                        .HasDatabaseName("ux_products_creation_key")
+                        .HasFilter("creation_key IS NOT NULL");
 
                     b.HasIndex("Sku")
                         .IsUnique()
