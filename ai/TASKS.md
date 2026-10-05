@@ -53,7 +53,7 @@ This file is the **single source of truth for task progress** during active deve
 
 - [~] Define the versioned route scheme, JSON conventions, and Problem Details error contract (stable error codes)
 - [ ] Implement `Idempotency-Key` handling for checkout, payment, refund, and cancellation endpoints
-- [ ] Add pagination, sorting, and filtering conventions to every collection endpoint
+- [~] Add pagination, sorting, and filtering conventions to every collection endpoint
 - [ ] Keep the OpenAPI document complete and add Spectral, `oasdiff`, and Schemathesis checks to CI
 - [ ] Externalize user-facing strings for localization and support `Accept-Language`
 
