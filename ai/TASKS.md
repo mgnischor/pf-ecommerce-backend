@@ -45,15 +45,15 @@ This file is the **single source of truth for task progress** during active deve
 - [x] Add a `Version` column to aggregate-root tables and enforce optimistic concurrency on every update
 - [~] Create one schema and one `DbContext` per bounded context, each with its own migration history
 - [x] Write reviewed EF Core migrations (expand/contract) and a migrations-bundle step for deployment
-- [~] Implement the transactional outbox, relay, and inbox/idempotency tables
+- [x] Implement the transactional outbox, relay, and inbox/idempotency tables
 - [x] Parameterize all queries (no raw string interpolation)
 - [x] Define Valkey cache entries with explicit TTL, key versioning, invalidation, and outage fallback
 
 ### API Contract
 
-- [~] Define the versioned route scheme, JSON conventions, and Problem Details error contract (stable error codes)
+- [x] Define the versioned route scheme, JSON conventions, and Problem Details error contract (stable error codes)
 - [ ] Implement `Idempotency-Key` handling for checkout, payment, refund, and cancellation endpoints
-- [~] Add pagination, sorting, and filtering conventions to every collection endpoint
+- [x] Add pagination, sorting, and filtering conventions to every collection endpoint
 - [ ] Keep the OpenAPI document complete and add Spectral, `oasdiff`, and Schemathesis checks to CI
 - [ ] Externalize user-facing strings for localization and support `Accept-Language`
 
@@ -63,7 +63,7 @@ This file is the **single source of truth for task progress** during active deve
 - [~] Enforce authentication by default (fallback policy) and object-ownership checks on every resource endpoint
 - [~] Add rate limiting for authentication, checkout, payment, and coupon endpoints
 - [ ] Verify payment webhook signatures and deduplicate provider events
-- [ ] Replace any hardcoded secrets with environment/secrets-manager references
+- [x] Replace any hardcoded secrets with environment/secrets-manager references
 - [~] Enable NuGet Audit, secret scanning, and CodeQL, and resolve critical CVEs
 
 ### Tests
@@ -90,7 +90,7 @@ This file is the **single source of truth for task progress** during active deve
 ### Observability
 
 - [x] Bootstrap the OpenTelemetry SDK (traces, metrics, logs over OTLP) with the mandatory resource attributes and no telemetry in the Domain layer
-- [~] Instrument PostgreSQL, Valkey, RabbitMQ, the outbox relay, and background jobs, with trace propagation through the outbox
+- [x] Instrument PostgreSQL, Valkey, RabbitMQ, the outbox relay, and background jobs, with trace propagation through the outbox
 - [ ] Define SLOs as code for the critical journeys (checkout, payment, sign-in, catalog) with burn-rate alerts, runbooks, and dashboards
 - [ ] Configure the Collector pipeline (redaction, tail sampling, security-log routing)
 - [~] Verify no secrets or personal data appear in logs, spans, or metric labels
@@ -101,11 +101,30 @@ This file is the **single source of truth for task progress** during active deve
 
 <!-- Add future tasks here using: - [ ] Task description -->
 
+- [ ] Implement the Billing bounded context (payment intents, append-only refunds ledger, provider webhook verification, anti-corruption layer)
+- [ ] Implement the Checkout bounded context (checkout saga: reserve stock, authorize payment, place order, schedule shipment)
+- [ ] Implement the Promotions bounded context (coupons, discount stacking rules, redemption limits)
+- [ ] Implement the Reviews bounded context (ratings, moderation)
+- [ ] Implement the Notifications bounded context (templates, channels, preferences)
+- [ ] Store `Idempotency-Key` values with their responses for retried endpoints
+- [ ] Add MFA for staff access levels
+- [ ] Persist ASP.NET Core Data Protection keys instead of the in-memory ring
+- [ ] Add a purge job for expired inbox rows
+- [ ] Alert on dead-letter queue depth
+- [ ] Automate event schema compatibility checks between versions
+- [ ] Enable TLS/mTLS inside the cluster with an internal CA and evaluate a managed broker (EX-005/EX-006 mitigations)
+
 ---
 
 ## Completed
 
 <!-- Tasks move here once marked [x] for archival reference -->
+
+- [x] Implement the transactional outbox, relay, and inbox/idempotency tables
+- [x] Define the versioned route scheme, JSON conventions, and Problem Details error contract (stable error codes)
+- [x] Add pagination, sorting, and filtering conventions to every collection endpoint
+- [x] Replace any hardcoded secrets with environment/secrets-manager references
+- [x] Instrument PostgreSQL, Valkey, RabbitMQ, the outbox relay, and background jobs, with trace propagation through the outbox
 
 - [x] Create the shared primitives in `SharedKernel` (`Entity`, `AggregateRoot`, `Result`, `Money`, event abstractions)
 - [x] Add architecture tests enforcing the dependency flow (API → Application → Domain, Infrastructure implementing Domain-defined interfaces) and context boundaries
