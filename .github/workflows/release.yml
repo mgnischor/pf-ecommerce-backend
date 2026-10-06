@@ -77,6 +77,16 @@ jobs:
                   done
                   ls -la dist/*.zip
 
+            - name: Build the Windows installer (NSIS)
+              run: |
+                  # NSIS is portable: the Windows setup.exe is assembled on Linux from the
+                  # win-x64 binaries published above (installer/pf-ecommerce-backend.nsi).
+                  sudo apt-get update && sudo apt-get install -y nsis
+                  makensis -DVERSION="$VERSION" -DPUBLISH_DIR=dist/win-x64 \
+                    "-DOUTFILE=dist/pf-ecommerce-backend-$VERSION-win-x64-setup.exe" \
+                    installer/pf-ecommerce-backend.nsi
+                  ls -la dist/*.exe
+
             - name: Write the changelog of this version
               run: |
                   # Full changelog: every Conventional Commit since the previous version tag, grouped by type.
@@ -121,7 +131,8 @@ jobs:
                   section "Chores and style" '^((chore)|(style))(\(.+\))?: '
                   echo "### Assets" >> CHANGELOG.md
                   echo >> CHANGELOG.md
-                  echo "One self-contained zip per runtime (no .NET installation required):" >> CHANGELOG.md
+                  echo "Self-contained zips, one per runtime (no .NET installation required)," >> CHANGELOG.md
+                  echo "plus the guided Windows setup:" >> CHANGELOG.md
                   echo >> CHANGELOG.md
                   for zip in dist/*.zip; do
                     echo "- \`$(basename "$zip")\`" >> CHANGELOG.md
@@ -131,4 +142,4 @@ jobs:
             - name: Create the GitHub Release
               env:
                   GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-              run: gh release create "$TAG" --title "pf-ecommerce-backend $TAG" --notes-file CHANGELOG.md dist/*.zip
+              run: gh release create "$TAG" --title "pf-ecommerce-backend $TAG" --notes-file CHANGELOG.md dist/*.zip dist/*-setup.exe
