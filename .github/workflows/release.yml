@@ -39,6 +39,21 @@ jobs:
               with:
                   global-json-file: global.json
 
+            - name: Verify the token can publish releases
+              env:
+                  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+              run: |
+                  # Creating a release needs push access. When the repository (or its organization)
+                  # restricts Actions to read-only tokens, the manifest permission above is silently
+                  # downgraded and 'gh release create' fails with 403 at the end of the job, after the
+                  # zips were already built. Fix: Settings -> Actions -> General -> Workflow permissions
+                  # -> 'Read and write permissions' (organization policies can override this per repository).
+                  if [[ "$(gh api "repos/$GITHUB_REPOSITORY" --jq '.permissions.push')" != "true" ]]; then
+                    echo "GITHUB_TOKEN cannot push to $GITHUB_REPOSITORY, so no release can be created." >&2
+                    echo "Enable 'Read and write permissions' under Settings -> Actions -> General -> Workflow permissions." >&2
+                    exit 1
+                  fi
+
             - name: Resolve the version from the tag
               run: |
                   if [[ "$GITHUB_REF_TYPE" == "tag" ]]; then
@@ -142,4 +157,12 @@ jobs:
             - name: Create the GitHub Release
               env:
                   GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-              run: gh release create "$TAG" --title "pf-ecommerce-backend $TAG" --notes-file CHANGELOG.md dist/*.zip dist/*-setup.exe
+              run: |
+                  # Re-runs are safe: when a previous attempt already opened the release (for example
+                  # it failed while uploading assets), reuse it and replace same-name assets.
+                  if gh release view "$TAG" >/dev/null 2>&1; then
+                    gh release edit "$TAG" --title "pf-ecommerce-backend $TAG" --notes-file CHANGELOG.md
+                    gh release upload "$TAG" --clobber dist/*.zip dist/*-setup.exe
+                  else
+                    gh release create "$TAG" --title "pf-ecommerce-backend $TAG" --notes-file CHANGELOG.md dist/*.zip dist/*-setup.exe
+                  fi
