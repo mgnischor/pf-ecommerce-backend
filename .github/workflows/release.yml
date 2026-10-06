@@ -1,0 +1,134 @@
+name: Release
+
+# Cut a release by pushing a version tag (v1.2.3). The pipeline publishes
+# self-contained executables (the .NET runtime travels inside the binaries),
+# zips one archive per runtime identifier, and opens a GitHub Release whose
+# description is the full changelog of the version.
+on:
+    push:
+        tags: ['v[0-9]+.[0-9]+.[0-9]+*']
+    workflow_dispatch:
+
+# Release creation needs to write releases and their assets.
+permissions:
+    contents: write
+
+# Never cancel a release once it started: a half-published version is worse than a slow one.
+concurrency:
+    group: release-${{ github.ref }}
+    cancel-in-progress: false
+
+env:
+    DOTNET_NOLOGO: true
+    DOTNET_CLI_TELEMETRY_OPTOUT: true
+    CI: true
+
+jobs:
+    release:
+        name: Publish self-contained zips and release
+        runs-on: ubuntu-latest
+        timeout-minutes: 30
+        steps:
+            - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+              with:
+                  # The changelog spans back to the previous tag, so the full history (and every tag) is required.
+                  fetch-depth: 0
+                  fetch-tags: true
+
+            - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+              with:
+                  global-json-file: global.json
+
+            - name: Resolve the version from the tag
+              run: |
+                  if [[ "$GITHUB_REF_TYPE" == "tag" ]]; then
+                    TAG="$GITHUB_REF_NAME"
+                  else
+                    echo "Releases are cut from version tags (v1.2.3). Push a tag or run this workflow from one." >&2
+                    exit 1
+                  fi
+                  if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+                    echo "Tag '$TAG' is not a version (expected v1.2.3 or v1.2.3-rc.1)." >&2
+                    exit 1
+                  fi
+                  echo "TAG=$TAG" >> "$GITHUB_ENV"
+                  echo "VERSION=${TAG#v}" >> "$GITHUB_ENV"
+
+            - name: Restore (locked)
+              run: dotnet restore Portfolio.csproj --locked-mode
+
+            - name: Quality gate (warnings are errors, unit tests)
+              run: |
+                  # The full suite (integration, containers, manifests) already runs in CI on main;
+                  # the release repeats the fast gates so a tag never ships what main would reject.
+                  dotnet build Portfolio.csproj -c Release --no-restore -warnaserror
+                  dotnet test --project tests/Portfolio.UnitTests -c Release
+
+            - name: Publish self-contained executables and zip them
+              run: |
+                  # Self-contained single-file binaries: no .NET installation is needed on the target machine.
+                  mkdir -p dist
+                  for rid in linux-x64 linux-arm64 win-x64 osx-arm64; do
+                    dotnet publish Portfolio.csproj -c Release -r "$rid" --self-contained \
+                      -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true \
+                      -p:Version="$VERSION" -p:InformationalVersion="$TAG+$GITHUB_SHA" \
+                      -o "dist/$rid"
+                    (cd "dist/$rid" && zip -9 -r "../pf-ecommerce-backend-$VERSION-$rid.zip" .)
+                  done
+                  ls -la dist/*.zip
+
+            - name: Write the changelog of this version
+              run: |
+                  # Full changelog: every Conventional Commit since the previous version tag, grouped by type.
+                  PREV_TAG=$(git describe --tags --abbrev=0 "$TAG^" 2>/dev/null || true)
+                  if [[ -n "$PREV_TAG" ]]; then
+                    RANGE="$PREV_TAG..$TAG"
+                    {
+                      echo "# pf-ecommerce-backend $TAG"
+                      echo
+                      echo "Changes since $PREV_TAG."
+                      echo
+                    } > CHANGELOG.md
+                  else
+                    RANGE="$TAG"
+                    {
+                      echo "# pf-ecommerce-backend $TAG"
+                      echo
+                      echo "First release: every commit up to this tag."
+                      echo
+                    } > CHANGELOG.md
+                  fi
+                  section() {
+                    local title="$1"; shift
+                    local pattern="$1"; shift
+                    local entries
+                    entries=$(git log "$RANGE" --format='%s %h' | grep -E "$pattern" || true)
+                    if [[ -n "$entries" ]]; then
+                      echo "## $title" >> CHANGELOG.md
+                      echo >> CHANGELOG.md
+                      echo "$entries" | sed -E 's/^(.*) ([0-9a-f]{7,40})$/\- \1 (\2)/' >> CHANGELOG.md
+                      echo >> CHANGELOG.md
+                    fi
+                  }
+                  section "Features" '^(feat)(\(.+\))?: '
+                  section "Bug fixes" '^(fix)(\(.+\))?: '
+                  section "Performance" '^(perf)(\(.+\))?: '
+                  section "Refactoring" '^(refactor)(\(.+\))?: '
+                  section "Documentation" '^(docs)(\(.+\))?: '
+                  section "Build and dependencies" '^(build)(\(.+\))?: '
+                  section "CI and automation" '^(ci)(\(.+\))?: '
+                  section "Tests" '^(test)(\(.+\))?: '
+                  section "Chores and style" '^((chore)|(style))(\(.+\))?: '
+                  echo "### Assets" >> CHANGELOG.md
+                  echo >> CHANGELOG.md
+                  echo "One self-contained zip per runtime (no .NET installation required):" >> CHANGELOG.md
+                  echo >> CHANGELOG.md
+                  for zip in dist/*.zip; do
+                    echo "- \`$(basename "$zip")\`" >> CHANGELOG.md
+                  done
+                  cat CHANGELOG.md
+
+            - name: Create the GitHub Release
+              env:
+                  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+              run: gh release create "$TAG" --title "pf-ecommerce-backend $TAG" --notes-file CHANGELOG.md dist/*.zip
